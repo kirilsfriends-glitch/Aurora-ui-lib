@@ -275,6 +275,8 @@ def main():
     bpy.context.scene["blender_version"] = bpy.app.version_string
     bpy.context.scene["license"] = "Original project assets"
     blend_path = SOURCE_OUT / "aurora_assets.blend"
+    # Never create .blend1 rolling backups in the generated asset directory.
+    bpy.context.preferences.filepaths.save_version = 0
     bpy.ops.wm.save_as_mainfile(filepath=str(blend_path), compress=True)
     print(f"Saved source {blend_path.name}: {blend_path.stat().st_size} bytes")
 

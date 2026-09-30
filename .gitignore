@@ -1,0 +1,3 @@
+# Blender rolling backup files are local/editor artifacts.
+*.blend1
+*.blend2
