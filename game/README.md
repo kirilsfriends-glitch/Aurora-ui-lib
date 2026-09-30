@@ -2,6 +2,8 @@
 
 A four-level mobile 3D campaign built with Godot 4.3 and original Blender 4.3 assets.
 
+Current Android release: **v0.2.0**.
+
 ## Campaign
 
 Collect the required aurora shards, complete each sector's secondary objective, and enter the stabilized portal. Falling or touching a hazard recovers the drone at the current level's spawn point without removing collected objectives.
