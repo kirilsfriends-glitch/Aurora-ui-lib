@@ -28,11 +28,12 @@ jobs:
 
     steps:
       - name: Check out project
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Export with Godot 4.3
         run: |
           mkdir -p build/android
+          set +e
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/workspace" \
             -w /workspace/game \
@@ -40,13 +41,30 @@ jobs:
             bash -lc '
               set -euo pipefail
               echo "Godot: $(godot --version)"
+              echo "Android SDK: $ANDROID_HOME"
               godot --headless --editor --quit
               godot --headless --verbose \
                 --export-debug "Android" \
                 "/workspace/build/android/${{ env.APK_NAME }}"
               APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+              test -n "$APKSIGNER"
               "$APKSIGNER" verify --verbose "/workspace/build/android/${{ env.APK_NAME }}"
-            '
+            ' 2>&1 | tee build/android/export.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### Godot Android export log"
+            echo '```text'
+            tail -n 180 build/android/export.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$STATUS" -ne 0 ]; then
+            DETAILS=$(tail -n 70 build/android/export.log | sed 's/%/%25/g; s/\r/%0D/g' | paste -sd '|' - | sed 's/|/%0A/g')
+            echo "::error title=Godot Android export failed::$DETAILS"
+            exit "$STATUS"
+          fi
 
       - name: Validate package and create checksum
         run: |
