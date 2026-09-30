@@ -28,14 +28,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python 3.11 for Blender 4.3
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
       - name: Install Blender 4.3 Python runtime
         run: |
-          python3 -m pip install --disable-pip-version-check --no-cache-dir bpy==4.3.0
-          python3 -c 'import bpy; print("Blender", bpy.app.version_string)'
+          python -m pip install --disable-pip-version-check --no-cache-dir bpy==4.3.0
+          python -c 'import bpy; print("Blender", bpy.app.version_string)'
 
       - name: Generate models and Blender source
         run: |
-          python3 tools/generate_models.py
+          python tools/generate_models.py
           test -s game/models/aurora_assets.blend
           for asset in \
             aurora_drone.glb aurora_shard.glb energy_sentinel.glb \
