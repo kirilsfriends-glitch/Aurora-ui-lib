@@ -1,0 +1,102 @@
+name: Build Aurora Drift 3D APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a0f376-aurora-ui-lib
+    paths:
+      - "game/**"
+      - ".github/workflows/build-android.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aurora-drift-3d-android
+  cancel-in-progress: true
+
+env:
+  APK_NAME: AuroraDrift3D-v0.1.0-debug.apk
+  RELEASE_TAG: aurora-drift-3d-v0.1.0
+
+jobs:
+  build-android:
+    name: Export signed Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v4
+
+      - name: Export with Godot 4.3
+        run: |
+          mkdir -p build/android
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace/game \
+            barichello/godot-ci:4.3 \
+            bash -lc '
+              set -euo pipefail
+              echo "Godot: $(godot --version)"
+              godot --headless --editor --quit
+              godot --headless --verbose \
+                --export-debug "Android" \
+                "/workspace/build/android/${{ env.APK_NAME }}"
+              APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+              "$APKSIGNER" verify --verbose "/workspace/build/android/${{ env.APK_NAME }}"
+            '
+
+      - name: Validate package and create checksum
+        run: |
+          set -euo pipefail
+          APK="build/android/$APK_NAME"
+          test -s "$APK"
+          unzip -t "$APK"
+          unzip -l "$APK" | grep -F "lib/arm64-v8a/libgodot_android.so"
+          (
+            cd build/android
+            sha256sum "$APK_NAME" > "$APK_NAME.sha256"
+          )
+          ls -lh "$APK" "$APK.sha256"
+          cat "$APK.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurora-drift-3d-android
+          path: |
+            build/android/${{ env.APK_NAME }}
+            build/android/${{ env.APK_NAME }}.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK="build/android/$APK_NAME"
+          CHECKSUM="$APK.sha256"
+          NOTES=$(cat <<'EOF'
+          ## Aurora Drift 3D v0.1.0
+
+          A small offline 3D collectathon made with Godot 4.3.
+
+          **Objective:** collect 10 aurora shards, dodge moving energy barriers, and escape through the portal.
+
+          **Controls:** use the on-screen direction pad and **JUMP** button. The APK targets Android 6.0+ and arm64-v8a devices. It is signed with a debug key for direct sideloading and testing.
+
+          Download the APK and optionally verify it with the attached SHA-256 file.
+          EOF
+          )
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK" "$CHECKSUM" --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              "$APK" "$CHECKSUM" \
+              --target "$GITHUB_SHA" \
+              --title "Aurora Drift 3D v0.1.0 (Android)" \
+              --notes "$NOTES"
+          fi

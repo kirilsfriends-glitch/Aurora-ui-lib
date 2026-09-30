@@ -1,0 +1,19 @@
+<svg height="512" width="512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07102f"/>
+      <stop offset="1" stop-color="#25105c"/>
+    </linearGradient>
+    <linearGradient id="aurora" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#22e6c8"/>
+      <stop offset="0.5" stop-color="#61a7ff"/>
+      <stop offset="1" stop-color="#d85cff"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="164" fill="none" stroke="#3353a8" stroke-width="20" opacity=".75"/>
+  <circle cx="256" cy="256" r="133" fill="none" stroke="url(#aurora)" stroke-width="15" filter="url(#glow)"/>
+  <path d="M256 86 304 210 430 256 304 302 256 426 208 302 82 256 208 210Z" fill="url(#aurora)" filter="url(#glow)"/>
+  <path d="M256 158 283 229 354 256 283 283 256 354 229 283 158 256 229 229Z" fill="#ecffff"/>
+</svg>
