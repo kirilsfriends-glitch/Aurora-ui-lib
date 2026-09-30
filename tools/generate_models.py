@@ -13,7 +13,9 @@ import bpy
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "game" / "models"
+SOURCE_OUT = ROOT / "assets" / "blender"
 OUT.mkdir(parents=True, exist_ok=True)
+SOURCE_OUT.mkdir(parents=True, exist_ok=True)
 
 
 def clear_scene():
@@ -272,7 +274,7 @@ def main():
     bpy.context.scene["generator"] = "tools/generate_models.py"
     bpy.context.scene["blender_version"] = bpy.app.version_string
     bpy.context.scene["license"] = "Original project assets"
-    blend_path = OUT / "aurora_assets.blend"
+    blend_path = SOURCE_OUT / "aurora_assets.blend"
     bpy.ops.wm.save_as_mainfile(filepath=str(blend_path), compress=True)
     print(f"Saved source {blend_path.name}: {blend_path.stat().st_size} bytes")
 

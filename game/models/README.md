@@ -10,7 +10,8 @@ Generated files:
 - `exit_portal.glb` — level exit;
 - `jump_pad.glb` — launch pad;
 - `moving_platform.glb` — modular floating platform;
-- `switch_beacon.glb` — interactive level switch;
-- `aurora_assets.blend` — editable Blender source containing all collections and materials.
+- `switch_beacon.glb` — interactive level switch.
+
+The editable source is stored outside the Godot import tree at [`assets/blender/aurora_assets.blend`](../../assets/blender/aurora_assets.blend), preventing Godot from trying to invoke Blender during every project import.
 
 Do not hand-edit generated `.glb` files. Update the generator and run the **Generate Blender models** workflow instead.

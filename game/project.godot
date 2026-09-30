@@ -1,10 +1,10 @@
 ; Aurora Drift 3D — Godot 4.3
-; A tiny procedural 3D collectathon made for Android.
+; A four-level Blender-powered 3D campaign for Android.
 config_version=5
 
 [application]
 config/name="Aurora Drift 3D"
-config/description="Collect aurora shards, dodge energy barriers, and escape through the portal."
+config/description="Pilot an aurora drone through four evolving neon sectors."
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 boot_splash/bg_color=Color(0.015, 0.025, 0.09, 1)

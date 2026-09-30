@@ -41,19 +41,19 @@ jobs:
       - name: Generate models and Blender source
         run: |
           python tools/generate_models.py
-          test -s game/models/aurora_assets.blend
+          test -s assets/blender/aurora_assets.blend
           for asset in \
             aurora_drone.glb aurora_shard.glb energy_sentinel.glb \
             exit_portal.glb jump_pad.glb moving_platform.glb switch_beacon.glb; do
             test -s "game/models/$asset"
           done
-          ls -lh game/models
+          ls -lh game/models assets/blender
 
       - name: Commit generated assets
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add game/models
+          git add game/models assets/blender
           if git diff --cached --quiet; then
             echo "Models are already up to date."
           else

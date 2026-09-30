@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  APK_NAME: AuroraDrift3D-v0.1.0-debug.apk
-  RELEASE_TAG: aurora-drift-3d-v0.1.0
+  APK_NAME: AuroraDrift3D-v0.2.0-debug.apk
+  RELEASE_TAG: aurora-drift-3d-v0.2.0
 
 jobs:
   build-android:
@@ -97,13 +97,15 @@ jobs:
           APK="build/android/$APK_NAME"
           CHECKSUM="$APK.sha256"
           NOTES=$(cat <<'EOF'
-          ## Aurora Drift 3D v0.1.0
+          ## Aurora Drift 3D v0.2.0
 
-          A small offline 3D collectathon made with Godot 4.3.
+          A substantially expanded offline 3D campaign made with Godot 4.3 and original Blender 4.3 assets.
 
-          **Objective:** collect 10 aurora shards, dodge moving energy barriers, and escape through the portal.
+          **Four evolving levels:** master patrol sentinels, moving islands and launch pads, polarity beacons and wind tunnels, then survive a timed low-gravity finale with disappearing platforms.
 
-          **Controls:** use the on-screen direction pad and **JUMP** button. The APK targets Android 6.0+ and arm64-v8a devices. It is signed with a debug key for direct sideloading and testing.
+          **Camera controls:** drag the right side of the screen or use **CAM ◀ / CAM ▶**. Desktop players can right-drag or use `Q` / `E`. Movement is camera-relative.
+
+          The APK targets arm64-v8a Android devices. It works offline, requests no sensitive permissions, and is signed with a debug key for direct sideloading and testing.
 
           Download the APK and optionally verify it with the attached SHA-256 file.
           EOF
@@ -115,6 +117,6 @@ jobs:
             gh release create "$RELEASE_TAG" \
               "$APK" "$CHECKSUM" \
               --target "$GITHUB_SHA" \
-              --title "Aurora Drift 3D v0.1.0 (Android)" \
+              --title "Aurora Drift 3D v0.2.0 (Android)" \
               --notes "$NOTES"
           fi
