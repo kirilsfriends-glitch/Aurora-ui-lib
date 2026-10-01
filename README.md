@@ -1,44 +1,46 @@
-# Aurora Strike: Mobile — Quality Vertical Slice
+# Aurora Strike: Mobile
 
-Aurora Strike is being rebuilt as a focused offline first-person tactical shooter for Android. The former v0.1.0 prototype and its GitHub Release were withdrawn because they did not meet the requested quality bar.
+Aurora Strike is being rebuilt from scratch as a mobile-first 3D FPS in **Unity 6 and C#**. The old Aurora Drift experience and the rejected broad prototype are not used by the Android Unity build.
 
-This branch now prioritizes one complete, testable combat slice instead of advertising unfinished breadth.
+## Current Unity vertical slice
 
-## Vertical slice 0.3 source-build alpha
+The active project is [`unity-probe/`](unity-probe/) (the directory name is retained because the Unity Build Automation target already points to it). It now contains the actual C# gameplay slice rather than the earlier toolchain cube:
 
-- **One authored map:** Dockyard / Night, a rain-soaked three-lane cargo terminal with warehouses, container routes, a central Customs landmark, cranes, spawn shelters, tactical cover, close-range flanks, and long rifle sightlines.
-- **Four tuned weapons:** AK-47, M4A1, AWP, and Glock-18.
-- **One finished mode:** 5v5 Team Deathmatch to 30 eliminations.
-- **Tactical bots:** sight checks, hearing and shot investigation, AStar routing, cover selection, strafing, retreat/reload decisions, separation, friendly-fire avoidance, and skill-based reaction/accuracy.
-- **Mobile FPS input:** independently tracked movement, look, fire, ADS, jump, crouch, reload, and weapon-swap touches.
-- **Presentation pass:** cinematic briefing art, rebuilt lobby and HUD, rain, cold/warm team lighting, location callouts, kill feed, hit/headshot feedback, weapon recoil/sway, reload poses, muzzle flashes, tracers, and damage feedback.
-- **Original sound pass:** weapon reports, reload mechanics, dry fire, UI confirmation, hit/headshot cues, and seamless dock ambience generated procedurally without third-party samples.
-- **Original Blender art:** Dockyard, four weapons, and the operator are generated as an editable Blender 4.3 source gallery.
+- bright daytime **Dockyard** combat arena with warehouses, containers, customs building, cranes, cover and three readable lanes;
+- complete **5v5 Team Deathmatch** loop with score limit, timer, deaths and respawns;
+- local first-person controller with movement, jump, recoil, ADS, weapon sway and animated reload pose;
+- independently tracked multitouch roles for move, look, fire, ADS, jump, reload and weapon swapping;
+- firing is accepted **only** from the dedicated FIRE control on Android—ordinary look/movement touches cannot trigger a shot;
+- persistent control settings for sensitivity, button scale, classic/compact/left-handed layouts, aim assist and inverted Y;
+- tactical C# bots with perception, reaction delay, A* routing, patrol/hunt/combat/cover states, strafing, retreat, separation and friendly-fire checks;
+- articulated operator rigs with procedural walk/aim animation;
+- AK-47, M4A1, AWP and Glock-18 authored in the original Blender source and converted to Unity-compatible OBJ resources;
+- a custom mobile shader referenced directly by the scene, avoiding the magenta stripped-shader issue found by the cloud smoke build;
+- mobile HUD with score, timer, location, health, ammo, crosshair, hit/headshot marker and kill feed.
 
-## Source-built engine
+This remains an **alpha vertical slice**, not the final promised five-map/twelve-weapon game. Device testing and iteration come before expanding content.
 
-The Android alpha is now built with **Godot 4.7.2-stable compiled directly from its official source tag**. CI compiles both the Linux editor and matching arm64 Android export template, runs the full game smoke test with that editor, and publishes engine provenance with the APK. See [`docs/ENGINE_BUILD.md`](docs/ENGINE_BUILD.md).
+## Unity cloud build
 
-## Art pipeline
+Unity Build Automation is configured for:
 
+- branch: `arena/01a0f376-aurora-ui-lib`
+- project directory: `unity-probe`
+- Unity: `6000.3.24f1`
+- Android application ID: `ai.arena.aurorastrike`
+- scene: `Assets/AuroraStrike.unity`
+
+The first cloud APK proved that the Unity/Android toolchain works. A new build is required after gameplay changes to validate compilation, runtime rendering, controls and performance on a real device.
+
+## Original art pipeline
+
+- Blender source: [`assets/blender/aurora_strike_assets.blend`](assets/blender/aurora_strike_assets.blend)
 - Blender generator: [`tools/generate_shooter_models.py`](tools/generate_shooter_models.py)
-- Original audio generator: [`tools/generate_audio.py`](tools/generate_audio.py)
-- Blender source: `assets/blender/aurora_strike_assets.blend`
-- Runtime models: [`game/models/`](game/models/)
-- Authored gameplay layout: [`game/scripts/dockyard_map.gd`](game/scripts/dockyard_map.gd)
+- dependency-free Unity converter: [`tools/convert_glb_to_unity_obj.py`](tools/convert_glb_to_unity_obj.py)
+- Unity runtime weapon models: `unity-probe/Assets/Resources/Models/`
 
-No downloaded models, textures, or audio samples are used. The Dockyard briefing background is original generated artwork stored in `game/ui/`.
+No downloaded models, textures, or audio samples are used in this slice.
 
-## Validation policy
+## Legacy reference implementation
 
-Every private test build must:
-
-1. import the authored map, models, UI, and audio in the source-built Godot 4.7.2 editor;
-2. verify the four active weapon definitions and assets;
-3. validate spawn separation, the cover graph, location zones, and an AStar route across the map;
-4. instantiate the actual lobby and deploy a complete 5v5 match;
-5. export and signature-check an arm64 Android APK.
-
-At the user's explicit request, CI now publishes this validated build as a clearly marked **alpha pre-release** so it can be tested on a real Android device. It must not be treated as the final game; subsequent changes will be driven by hands-on feedback.
-
-The Godot project and controls are documented in [`game/README.md`](game/README.md).
+The previous Godot vertical slice remains under [`game/`](game/) only as a functional design/reference implementation while systems are ported. It is not included in the Unity Android build.

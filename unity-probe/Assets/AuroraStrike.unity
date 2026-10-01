@@ -130,7 +130,7 @@ GameObject:
   - component: {fileID: 1001}
   - component: {fileID: 1002}
   m_Layer: 0
-  m_Name: Aurora Unity Cloud Bootstrap
+  m_Name: Aurora Strike Bootstrap
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -163,3 +163,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f11543d294c54af18a03e26aed3f8d74, type: 3}
   m_Name:
   m_EditorClassIdentifier:
+  mobileLitShader: {fileID: 4800000, guid: 4a6f24f46a154d0fa7fd951d41c694ca, type: 3}
