@@ -35,6 +35,6 @@ Every private test build must:
 4. instantiate the actual lobby and deploy a complete 5v5 match;
 5. export and signature-check an arm64 Android APK.
 
-CI uploads the result as a short-lived **private workflow artifact only**. It does not publish a GitHub Release. A public APK will return only after hands-on approval of the vertical slice.
+At the user's explicit request, CI now publishes this validated build as a clearly marked **alpha pre-release** so it can be tested on a real Android device. It must not be treated as the final game; subsequent changes will be driven by hands-on feedback.
 
 The Godot project and controls are documented in [`game/README.md`](game/README.md).

@@ -10,7 +10,7 @@ on:
       - ".github/workflows/build-android.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: aurora-strike-vertical-slice-android
@@ -18,10 +18,11 @@ concurrency:
 
 env:
   APK_NAME: AuroraStrike-VerticalSlice-v0.2.0-alpha-debug.apk
+  RELEASE_TAG: aurora-strike-vertical-slice-v0.2.0-alpha
 
 jobs:
   build-android:
-    name: Runtime-test and export private test APK
+    name: Runtime-test and publish Android alpha
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -59,7 +60,7 @@ jobs:
               echo "STAGE 2/3: deploy and validate the full 5v5 vertical slice"
               timeout --signal=TERM --kill-after=30s 420s \
                 godot --headless --path . --script res://tests/shooter_smoke_test.gd
-              echo "STAGE 3/3: export private Android test build"
+              echo "STAGE 3/3: export Android alpha test build"
               timeout --signal=TERM --kill-after=30s 900s \
                 godot --headless --verbose \
                   --export-debug "Android" \
@@ -94,13 +95,55 @@ jobs:
           ls -lh "$APK" "$APK.sha256"
           cat "$APK.sha256"
 
-      - name: Upload private test artifact
+      - name: Upload test artifact
         if: steps.assets.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: aurora-strike-vertical-slice-private-test
+          name: aurora-strike-vertical-slice-android
           path: |
             build/android/${{ env.APK_NAME }}
             build/android/${{ env.APK_NAME }}.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish requested vertical-slice pre-release
+        if: steps.assets.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK="build/android/$APK_NAME"
+          CHECKSUM="$APK.sha256"
+          NOTES=$(cat <<'EOF'
+          ## Aurora Strike: Mobile — vertical slice 0.2 alpha
+
+          This is the focused Android test build requested for hands-on feedback. It is intentionally marked as a **pre-release**, not a finished game.
+
+          ### Included
+
+          - one authored rain-soaked map: **Dockyard / Night**;
+          - 5v5 Team Deathmatch against tactical bots;
+          - four active weapons: AK-47, M4A1, AWP, and Glock-18;
+          - rebuilt briefing/loadout UI and combat HUD;
+          - bot vision, hearing, investigation, AStar routing, cover, retreat, and skill scaling;
+          - independent mobile movement, aim, fire, ADS, jump, crouch, reload, and swap touches;
+          - original weapon, reload, hit, UI, and dock ambience audio;
+          - original Blender map, operator, and weapon models.
+
+          The APK is arm64-v8a and debug-signed for direct testing. Please report device model, Android version, and exact reproduction steps for every bug. A SHA-256 checksum is attached.
+          EOF
+          )
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK" "$CHECKSUM" --clobber
+            gh release edit "$RELEASE_TAG" \
+              --target "$GITHUB_SHA" \
+              --title "Aurora Strike Vertical Slice v0.2 Alpha (Android)" \
+              --notes "$NOTES" \
+              --prerelease
+          else
+            gh release create "$RELEASE_TAG" "$APK" "$CHECKSUM" \
+              --target "$GITHUB_SHA" \
+              --title "Aurora Strike Vertical Slice v0.2 Alpha (Android)" \
+              --notes "$NOTES" \
+              --prerelease
+          fi

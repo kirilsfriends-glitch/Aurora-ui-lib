@@ -75,4 +75,4 @@ godot --headless --editor --quit --path game
 godot --headless --path game --script res://tests/shooter_smoke_test.gd
 ```
 
-The smoke test loads the real entry scene and deploys all ten combatants. Android CI publishes only a temporary workflow artifact while this rebuild is under review.
+The smoke test loads the real entry scene and deploys all ten combatants. Android CI publishes the validated APK as an explicitly labeled alpha pre-release for hands-on device testing.
