@@ -35,7 +35,7 @@ func _run() -> void:
         builder.build(data)
         check(builder.get_team_spawn(0, 0) != builder.get_team_spawn(1, 0), "Team spawns overlap: " + map_id)
         check(not builder.get_cover_points().is_empty(), "Cover graph missing: " + map_id)
-        check(not builder.get_path(builder.get_team_spawn(0, 0), builder.get_team_spawn(1, 0)).is_empty(), "Path graph missing: " + map_id)
+        check(not builder.find_path(builder.get_team_spawn(0, 0), builder.get_team_spawn(1, 0)).is_empty(), "Path graph missing: " + map_id)
         builder.free()
 
     var required_scripts := [

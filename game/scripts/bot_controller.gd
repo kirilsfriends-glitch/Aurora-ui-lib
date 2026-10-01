@@ -192,7 +192,7 @@ func _select_cover(danger_position: Vector3) -> void:
 func _set_move_goal(destination: Vector3) -> void:
     if move_goal.distance_to(destination) < 1.5 and not path.is_empty(): return
     move_goal = destination
-    path = game.map_runtime.get_path(global_position, destination)
+    path = game.map_runtime.find_path(global_position, destination)
     path_index = 0
 
 func _move(delta: float) -> void:

@@ -181,9 +181,9 @@ func _finish_match() -> void:
     match_active = false
     round_transition = true
     Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-    var victory := team_scores[0] >= team_scores[1]
-    var title := "VICTORY" if victory else "DEFEAT"
-    var detail := "%s • %s\nALPHA %d  —  %d BRAVO" % [MAP_LIBRARY.get_map(current_map)["name"], _mode_title(), team_scores[0], team_scores[1]]
+    var victory: bool = int(team_scores[0]) >= int(team_scores[1])
+    var title: String = "VICTORY" if victory else "DEFEAT"
+    var detail: String = "%s • %s\nALPHA %d  —  %d BRAVO" % [MAP_LIBRARY.get_map(current_map)["name"], _mode_title(), team_scores[0], team_scores[1]]
     hud.set_match_visible(false)
     if is_instance_valid(touch_layer): touch_layer.visible = false
     lobby.show_result(title, detail, victory)

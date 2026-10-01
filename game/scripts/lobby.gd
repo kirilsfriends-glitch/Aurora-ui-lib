@@ -249,11 +249,11 @@ func _style_button(button: BaseButton, accent := Color("286b73")) -> void:
     normal.content_margin_left = 14
     normal.content_margin_right = 14
     button.add_theme_stylebox_override("normal", normal)
-    var hover := normal.duplicate()
+    var hover := normal.duplicate() as StyleBoxFlat
     hover.bg_color = accent.darkened(0.42)
     hover.border_color = accent.lightened(0.22)
     button.add_theme_stylebox_override("hover", hover)
-    var pressed := normal.duplicate()
+    var pressed := normal.duplicate() as StyleBoxFlat
     pressed.bg_color = accent.darkened(0.2)
     pressed.border_color = accent.lightened(0.4)
     button.add_theme_stylebox_override("pressed", pressed)

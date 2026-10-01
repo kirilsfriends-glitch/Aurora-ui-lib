@@ -108,7 +108,7 @@ func _add_obstacle(data: Dictionary) -> void:
     var model_path := "res://models/%s.glb" % model_name
     if not model_name.is_empty() and ResourceLoader.exists(model_path):
         var packed := load(model_path) as PackedScene
-        var model := packed.instantiate()
+        var model: Node3D = packed.instantiate()
         model.scale = size / (Vector3(6.0, 2.6, 2.6) if kind == "container" else Vector3(2.0, 2.0, 2.0))
         body.add_child(model)
     else:
@@ -129,7 +129,7 @@ func _build_control_zone() -> void:
 
 func set_control_team(team: int) -> void:
     if not is_instance_valid(control_visual): return
-    var color := Color("54eaff") if team == 0 else Color("ff557e") if team == 1 else map_data["accent"]
+    var color: Color = Color("54eaff") if team == 0 else Color("ff557e") if team == 1 else map_data["accent"]
     control_visual.material_override = _material(Color(color, 0.38), 2.5, true)
 
 func _build_navigation_graph() -> void:
@@ -160,12 +160,12 @@ func _build_navigation_graph() -> void:
                 astar.connect_points(a, b, true)
 
 func get_next_path_point(from: Vector3, to: Vector3) -> Vector3:
-    var route := get_path(from, to)
+    var route := find_path(from, to)
     if route.size() >= 2: return route[1]
     if route.size() == 1: return route[0]
     return to
 
-func get_path(from: Vector3, to: Vector3) -> PackedVector3Array:
+func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
     if astar.get_point_count() == 0: return PackedVector3Array([to])
     var start := astar.get_closest_point(from)
     var finish := astar.get_closest_point(to)
