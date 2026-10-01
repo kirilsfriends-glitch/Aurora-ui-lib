@@ -1,4 +1,4 @@
-name: Build Aurora Drift 3D APK
+name: Build Aurora Strike Mobile APK
 
 on:
   workflow_dispatch:
@@ -13,24 +13,35 @@ permissions:
   contents: write
 
 concurrency:
-  group: aurora-drift-3d-android
+  group: aurora-strike-mobile-android
   cancel-in-progress: true
 
 env:
-  APK_NAME: AuroraDrift3D-v0.4.3-debug.apk
-  RELEASE_TAG: aurora-drift-3d-v0.4.3
+  APK_NAME: AuroraStrikeMobile-v0.1.0-debug.apk
+  RELEASE_TAG: aurora-strike-mobile-v0.1.0
 
 jobs:
   build-android:
-    name: Export signed Android APK
+    name: Smoke-test and export arm64 APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Check out project
         uses: actions/checkout@v5
 
-      - name: Export with Godot 4.3
+      - name: Check generated Blender models
+        id: assets
+        run: |
+          if test -s game/models/ak47.glb && test -s game/models/tactical_operator.glb && test -s game/models/cargo_container.glb; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Blender models are not committed yet; asset generation will trigger the production build."
+          fi
+
+      - name: Import, test, and export with Godot 4.3
+        if: steps.assets.outputs.ready == 'true'
         run: |
           mkdir -p build/android
           set +e
@@ -41,13 +52,12 @@ jobs:
             bash -lc '
               set -euo pipefail
               echo "Godot: $(godot --version)"
-              echo "Android SDK: $ANDROID_HOME"
-              echo "STAGE 1/3: import"
-              timeout --signal=TERM --kill-after=30s 360s \
+              echo "STAGE 1/3: import project and Blender GLBs"
+              timeout --signal=TERM --kill-after=30s 420s \
                 godot --headless --editor --quit
-              echo "STAGE 2/3: ten-level smoke test"
-              timeout --signal=TERM --kill-after=30s 360s \
-                godot --headless --path . --script res://tests/campaign_smoke_test.gd
+              echo "STAGE 2/3: gameplay smoke tests"
+              timeout --signal=TERM --kill-after=30s 420s \
+                godot --headless --path . --script res://tests/shooter_smoke_test.gd
               echo "STAGE 3/3: Android export"
               timeout --signal=TERM --kill-after=30s 900s \
                 godot --headless --verbose \
@@ -59,44 +69,42 @@ jobs:
             ' 2>&1 | tee build/android/export.log
           STATUS=${PIPESTATUS[0]}
           set -e
-
           {
-            echo "### Godot Android export log"
+            echo "### Aurora Strike Godot export log"
             echo '```text'
-            tail -n 180 build/android/export.log
+            tail -n 200 build/android/export.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-
           if [ "$STATUS" -ne 0 ]; then
-            DETAILS=$(tail -n 70 build/android/export.log | sed 's/%/%25/g; s/\r/%0D/g' | paste -sd '|' - | sed 's/|/%0A/g')
+            DETAILS=$(tail -n 80 build/android/export.log | sed 's/%/%25/g; s/\r/%0D/g' | paste -sd '|' - | sed 's/|/%0A/g')
             echo "::error title=Godot Android export failed::$DETAILS"
             exit "$STATUS"
           fi
 
-      - name: Validate package and create checksum
+      - name: Validate APK and create checksum
+        if: steps.assets.outputs.ready == 'true'
         run: |
           set -euo pipefail
           APK="build/android/$APK_NAME"
           test -s "$APK"
           unzip -t "$APK"
           unzip -l "$APK" | grep -F "lib/arm64-v8a/libgodot_android.so"
-          (
-            cd build/android
-            sha256sum "$APK_NAME" > "$APK_NAME.sha256"
-          )
+          (cd build/android && sha256sum "$APK_NAME" > "$APK_NAME.sha256")
           ls -lh "$APK" "$APK.sha256"
           cat "$APK.sha256"
 
-      - name: Upload workflow artifact
+      - name: Upload Android artifact
+        if: steps.assets.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: aurora-drift-3d-android
+          name: aurora-strike-mobile-android
           path: |
             build/android/${{ env.APK_NAME }}
             build/android/${{ env.APK_NAME }}.sha256
           if-no-files-found: error
 
       - name: Publish GitHub Release
+        if: steps.assets.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -104,30 +112,27 @@ jobs:
           APK="build/android/$APK_NAME"
           CHECKSUM="$APK.sha256"
           NOTES=$(cat <<'EOF'
-          ## Aurora Drift 3D v0.4.3
+          ## Aurora Strike: Mobile v0.1.0
 
-          A definitive collision and visibility correction for the ten-level Godot 4.3 campaign.
+          A new offline first-person tactical shooter built from scratch for Android.
 
-          **Levels 3 and 4 repaired:** all red sentinel and rotating-laser hazards were removed from these sectors, including centers placed directly inside required beacons. Neither level contains a lethal red collision area anymore.
+          - **5 tactical maps:** Dockyard Zero, Sandstone Citadel, Metro Nexus, Frostline Base, and Neon Labs.
+          - **12 weapons:** AK-47, M4A1, AWP, Scout, MP5, P90, Nova, Desert Eagle, Glock-18, USP-S, tactical knife, and frag grenade.
+          - **3 modes:** Team Deathmatch, Elimination, and Control.
+          - **5v5 smart bots** use vision, hearing, investigation, AStar pathfinding, cover, retreats, reload decisions, and difficulty-scaled accuracy.
+          - **Map-voting lobby:** all nine bots cast randomized votes alongside the player.
+          - **True independent multitouch:** move, look, fire, ADS, jump, crouch, reload, and weapon swap can overlap.
+          - **Original Blender art:** procedural weapon, operator, container, and cover models are included with reproducible Blender source.
 
-          **Deep-contact hit detection:** elsewhere, both the drone and red sentinels use compact collision cores, laser and pulse-gate collision is narrower than the visible effect, and a hit requires 120 ms of continuous overlap. Fast near misses no longer kill.
-
-          **Explicitly bright rendering:** ambient energy, exposure, two shadow-free directional lights, procedural surface colors, and emissive floor luminance were all substantially increased for large arenas.
-
-          Ultrawide fullscreen, ten levels, balanced Blender colors, mobile optimization, and independent multitouch controls are retained.
-
-          The APK targets arm64-v8a Android devices. It works offline, requests no sensitive permissions, and is signed with a debug key for direct sideloading and testing.
-
-          Download the APK and optionally verify it with the attached SHA-256 file.
+          The APK is arm64-v8a, works offline, requests no custom permissions, and is debug-signed for direct sideloading. Verify the download with the attached SHA-256 file.
           EOF
           )
-
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$APK" "$CHECKSUM" --clobber
+            gh release edit "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Aurora Strike: Mobile v0.1.0 (Android)" --notes "$NOTES"
           else
-            gh release create "$RELEASE_TAG" \
-              "$APK" "$CHECKSUM" \
+            gh release create "$RELEASE_TAG" "$APK" "$CHECKSUM" \
               --target "$GITHUB_SHA" \
-              --title "Aurora Drift 3D v0.4.3 (Android)" \
+              --title "Aurora Strike: Mobile v0.1.0 (Android)" \
               --notes "$NOTES"
           fi

@@ -1,86 +1,64 @@
-# Aurora Drift 3D
+# Aurora Strike: Mobile — Godot Project
 
-A ten-level mobile 3D campaign built with Godot 4.3 and original Blender 4.3 assets.
+Aurora Strike is a mobile-focused 5v5 offline FPS built with Godot 4.3 GL Compatibility rendering.
 
-Current Android release: **v0.4.3**.
+## Game flow
 
-## Campaign
+The opening operations lobby allows the player to choose a mode and bot difficulty, then vote on one of five maps. Nine simulated bot votes are randomized for each lobby. The highest-voted map wins; tied votes are resolved randomly.
 
-Collect the required aurora shards, complete each sector's secondary objective, and enter the stabilized portal. Falling or touching a hazard recovers the drone at the current level's spawn point without removing collected objectives.
+- **Team Deathmatch:** first team to 40 eliminations, with three-second respawns.
+- **Elimination:** no mid-round respawns; first team to win five rounds wins the match.
+- **Control:** occupy the center zone uncontested; first team to 100 points wins.
 
-| Level | Challenge |
-| --- | --- |
-| Aurora Garden | Core movement, jumping, shards, patrol sentinels |
-| Shifting Isles | Moving platforms, launch pads, void traversal |
-| Polarity Reactor | Beacons, wind zones, open nonlethal patrol lanes |
-| Event Horizon | Low gravity, disappearing platforms, precision jumps, countdown |
-| Gravity Archipelago | Gravity wells, curved jumps, elevated islands |
-| Nova Circuit | Pulse gates, acceleration lanes, timed relays |
-| Radiant Relay | Crossing currents, four relays, overlapping patrols |
-| Fractured Ascent | Moving and vanishing ascent with gravity wells |
-| Chromatic Tempest | Dense timed mix of gates, currents, lasers, sentinels |
-| Aurora Apex | Final low-gravity combination of campaign mechanics |
-
-Levels 7–10 focus on increasingly demanding combinations rather than requiring a unique mechanic on every stage.
-
-## Visibility and hazard fairness
-
-Version 0.4.3 removes all red sentinel and rotating-laser hazards from levels 3 and 4. The required level-4 beacons and collectibles can no longer be occupied by a lethal red model; difficulty there comes from wind, low gravity, disappearing platforms, routing, and the timer instead.
-
-The drone capsule radius is `0.30`, the sentinel lethal radius is `0.30`, and laser/pulse-gate collision is narrower than its visible effect. A lethal hit is accepted only after 120 ms of continuous overlap, so a single broad-phase frame or fast near miss cannot reset the player.
-
-Large arenas receive ambient energy `1.9`, brighter exposure, two global shadow-free directional lights, lifted procedural colors, and a minimum opaque emission of `1.0`. Ultrawide `expand` mode and balanced Blender materials remain enabled.
+Each match contains the local player, four Alpha teammates, and five Bravo opponents.
 
 ## Controls
 
-### Android / touch
+### Android multitouch
 
-- place a finger anywhere in the lower-left movement zone to create a floating analog stick;
-- move the stick with that finger for camera-relative movement;
-- tap **JUMP** with a second finger while continuing to move;
-- drag anywhere outside the movement and jump zones with another finger to orbit the camera;
-- movement, jump, and camera fingers are tracked independently.
+Every touch is independently assigned and retained until release, so actions can overlap:
 
-### Desktop
+- floating left stick — movement;
+- drag on unoccupied right-side space — camera aim;
+- **FIRE** — shoot (hold for automatic weapons);
+- **ADS** — aim down sights / scope;
+- **JUMP** — jump;
+- **DUCK** — crouch while held;
+- **R** — reload;
+- **SWAP** — cycle through all twelve weapons.
 
-- `WASD` or arrow keys — move relative to the camera;
+### Desktop test controls
+
+- `W`, `A`, `S`, `D` — move;
+- mouse — aim;
+- left mouse — fire;
 - `Space` — jump;
-- `Q` / `E` — rotate the camera;
-- right- or middle-mouse drag — orbit the camera;
-- mouse wheel — zoom;
-- `R` — restart the current level.
+- `R` — reload;
+- `Q` — cycle weapon;
+- `Esc` — release the mouse cursor.
 
-## Mobile optimization
+## Systems
 
-- stars use one billboard `MultiMesh` instead of 90 UV spheres;
-- real-time directional shadows and redundant decorative lights remain disabled;
-- repeated box meshes and materials share cached resources;
-- Blender retains editable component objects but exports one optimized render mesh per GLB;
-- transparent effects and planets use deliberately low segment counts;
-- 3D content renders at 82% scale with FSR 1.0 while the HUD stays native-resolution;
-- Android CI instantiates all ten levels before export.
+- `scripts/game.gd` — match lifecycle, teams, modes, scoring, rounds, respawns, effects, and damage policy.
+- `scripts/lobby.gd` — operations UI and player/bot map voting.
+- `scripts/player_controller.gd` — first-person movement, camera, crouch, ADS, health, and loadout.
+- `scripts/bot_controller.gd` — perception, hearing, tactical states, AStar routing, cover, combat, and skill scaling.
+- `scripts/weapon_controller.gd` — hitscan, shotgun pellets, headshots, reloads, recoil, grenades, and model mounting.
+- `scripts/weapon_database.gd` — authoritative statistics for the twelve launch weapons.
+- `scripts/map_library.gd` — five map layouts, palettes, spawns, obstacles, and objectives.
+- `scripts/map_builder.gd` — optimized procedural geometry and waypoint/cover graph generation.
+- `scripts/touch_fps_controls.gd` — independent mobile touch-role tracking.
+- `scripts/hud.gd` — match score, timer, kill feed, hit feedback, health, ammunition, and objectives.
 
-## Blender assets
+The map renderer uses shared primitive resources, low-cost materials, baked procedural layouts, shadow-free directional lighting, and 0.85 3D scaling for stable mobile performance. Detailed Blender assets are reserved for weapons, operators, and high-value props.
 
-The seven GLB models in [`models/`](models/) are generated by Blender 4.3 from [`../tools/generate_models.py`](../tools/generate_models.py). The editable multi-collection source file is [`../assets/blender/aurora_assets.blend`](../assets/blender/aurora_assets.blend).
+## Validation
 
-## Run locally
-
-```bash
-godot --path game
-```
-
-For headless validation:
+With Godot 4.3 available:
 
 ```bash
-godot --headless --path game --editor --quit
-godot --headless --path game --script res://tests/campaign_smoke_test.gd
+godot --headless --editor --quit --path game
+godot --headless --path game --script res://tests/shooter_smoke_test.gd
 ```
 
-## Android build
-
-```bash
-godot --headless --export-debug "Android" ../build/android/AuroraDrift3D-v0.4.3-debug.apk
-```
-
-The resulting arm64 APK is signed for sideload testing and published as a GitHub Release asset together with its SHA-256 checksum.
+The CI smoke test verifies 12 weapon definitions, five maps, ten spawn sets, tactical cover, and AStar routes before Android export.

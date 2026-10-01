@@ -1,13 +1,13 @@
-; Aurora Drift 3D — Godot 4.3
-; A ten-level Blender-powered 3D campaign for Android.
+; Aurora Strike: Mobile — Godot 4.3
+; Tactical offline FPS for Android and desktop.
 config_version=5
 
 [application]
-config/name="Aurora Drift 3D"
-config/description="Pilot an aurora drone through ten increasingly difficult neon sectors."
+config/name="Aurora Strike: Mobile"
+config/description="A 5v5 tactical mobile FPS with smart bots, map voting, and twelve weapons."
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
-boot_splash/bg_color=Color(0.015, 0.025, 0.09, 1)
+boot_splash/bg_color=Color(0.018, 0.028, 0.055, 1)
 boot_splash/show_image=false
 config/icon="res://icon.svg"
 
@@ -23,14 +23,16 @@ window/handheld/orientation=0
 [rendering]
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-; Render 3D below native resolution and reconstruct with FSR 1.0. UI remains crisp.
-scaling_3d/scale=0.82
+scaling_3d/scale=0.85
 scaling_3d/mode=1
 scaling_3d/fsr_sharpness=0.35
 anti_aliasing/quality/msaa_3d=0
 textures/default_filters/use_nearest_mipmap_filter=false
 textures/vram_compression/import_etc2_astc=true
-environment/defaults/default_clear_color=Color(0.015, 0.025, 0.09, 1)
+environment/defaults/default_clear_color=Color(0.018, 0.028, 0.055, 1)
+
+[physics]
+common/physics_ticks_per_second=60
 
 [audio]
 default_bus_layout="res://default_bus_layout.tres"
