@@ -1,0 +1,354 @@
+name: Probe legal Unreal Engine workarounds
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a0f376-aurora-ui-lib
+    paths:
+      - ".github/workflows/probe-unreal-workarounds.yml"
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  UE_LATEST: "5.8.3"
+
+jobs:
+  alternate-credentials:
+    name: Alternate authorized source and container credentials
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      source_access: ${{ steps.access.outputs.source_access }}
+      container_access: ${{ steps.access.outputs.container_access }}
+    env:
+      DEFAULT_GITHUB_TOKEN: ${{ github.token }}
+      UE_GITHUB_TOKEN: ${{ secrets.UE_GITHUB_TOKEN }}
+      UNREAL_ENGINE_TOKEN: ${{ secrets.UNREAL_ENGINE_TOKEN }}
+      UNREAL_GITHUB_TOKEN: ${{ secrets.UNREAL_GITHUB_TOKEN }}
+      EPIC_GITHUB_TOKEN: ${{ secrets.EPIC_GITHUB_TOKEN }}
+      GH_PAT: ${{ secrets.GH_PAT }}
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+    steps:
+      - name: Try every configured GitHub token without exposing it
+        id: access
+        shell: bash
+        run: |
+          set -u
+          REPORT="$RUNNER_TEMP/unreal-alternate-credentials.txt"
+          touch "$REPORT"
+          record() { printf '%s\n' "$*" | tee -a "$REPORT"; }
+
+          record "Unreal Engine alternate credential probe"
+          record "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          values=(
+            "$DEFAULT_GITHUB_TOKEN"
+            "$UE_GITHUB_TOKEN"
+            "$UNREAL_ENGINE_TOKEN"
+            "$UNREAL_GITHUB_TOKEN"
+            "$EPIC_GITHUB_TOKEN"
+            "$GH_PAT"
+            "$GHCR_TOKEN"
+          )
+          labels=(
+            "workflow token"
+            "UE_GITHUB_TOKEN"
+            "UNREAL_ENGINE_TOKEN"
+            "UNREAL_GITHUB_TOKEN"
+            "EPIC_GITHUB_TOKEN"
+            "GH_PAT"
+            "GHCR_TOKEN"
+          )
+
+          SOURCE_ACCESS=false
+          CONTAINER_ACCESS=false
+          CONFIGURED=0
+          WINNING_TOKEN=""
+
+          for i in "${!values[@]}"; do
+            token="${values[$i]}"
+            [[ -n "$token" ]] || continue
+            CONFIGURED=$((CONFIGURED + 1))
+            status="$(curl --silent --show-error --output "$RUNNER_TEMP/repo-$i.json" \
+              --write-out '%{http_code}' \
+              -H "Authorization: Bearer $token" \
+              -H 'Accept: application/vnd.github+json' \
+              https://api.github.com/repos/EpicGames/UnrealEngine || true)"
+            if [[ "$status" == "200" ]]; then
+              record "SOURCE AVAILABLE via ${labels[$i]}"
+              SOURCE_ACCESS=true
+              WINNING_TOKEN="$token"
+              break
+            else
+              record "Source unavailable via ${labels[$i]} (HTTP ${status:-transport-error})"
+            fi
+          done
+
+          record "Configured candidate tokens checked: $CONFIGURED"
+
+          if [[ "$SOURCE_ACCESS" == true ]]; then
+            record "Validating actual release branch read with a shallow, blobless clone"
+            git -c credential.helper= \
+              -c "http.extraHeader=Authorization: Bearer $WINNING_TOKEN" \
+              clone --depth 1 --filter=blob:none --single-branch --branch release \
+              https://github.com/EpicGames/UnrealEngine.git "$RUNNER_TEMP/UnrealEngine"
+            git -C "$RUNNER_TEMP/UnrealEngine" rev-parse HEAD | tee -a "$REPORT"
+            du -sh "$RUNNER_TEMP/UnrealEngine" | tee -a "$REPORT"
+          fi
+
+          record "Checking exact current and fallback tags in Epic's official GHCR package"
+          for i in "${!values[@]}"; do
+            token="${values[$i]}"
+            [[ -n "$token" ]] || continue
+            registry_user="$(curl --silent --show-error \
+              -H "Authorization: Bearer $token" \
+              -H 'Accept: application/vnd.github+json' \
+              https://api.github.com/user | python3 -c 'import json,sys; print(json.load(sys.stdin).get("login", ""))' 2>/dev/null || true)"
+            [[ -n "$registry_user" ]] || registry_user="$GITHUB_ACTOR"
+            if ! printf '%s' "$token" | docker login ghcr.io -u "$registry_user" --password-stdin \
+                > "$RUNNER_TEMP/ghcr-login-$i.txt" 2>&1; then
+              record "GHCR login unavailable via ${labels[$i]}"
+              continue
+            fi
+            for tag in \
+              "dev-slim-${UE_LATEST}" "dev-${UE_LATEST}" \
+              dev-slim-5.8.2 dev-5.8.2 \
+              dev-slim-5.7 dev-5.7 dev-4.27; do
+              if docker manifest inspect "ghcr.io/epicgames/unreal-engine:$tag" \
+                  > "$RUNNER_TEMP/official-$tag.json" 2> "$RUNNER_TEMP/official-$tag.err"; then
+                record "OFFICIAL CONTAINER AVAILABLE via ${labels[$i]}: ghcr.io/epicgames/unreal-engine:$tag"
+                CONTAINER_ACCESS=true
+                break 2
+              fi
+            done
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            record "Official Epic development package unavailable via ${labels[$i]}"
+          done
+
+          echo "source_access=$SOURCE_ACCESS" >> "$GITHUB_OUTPUT"
+          echo "container_access=$CONTAINER_ACCESS" >> "$GITHUB_OUTPUT"
+
+          if [[ "$SOURCE_ACCESS" == true || "$CONTAINER_ACCESS" == true ]]; then
+            record "FINAL: AUTHORIZED_UNREAL_ROUTE_FOUND"
+            echo "::notice title=Unreal workaround result::An authorized Unreal source or official container route was found. Stop before other engines."
+          else
+            record "FINAL: NO_AUTHORIZED_UNREAL_CREDENTIAL_ROUTE"
+            echo "::warning title=Unreal workaround result::No configured token can access Epic source or official development containers."
+          fi
+
+          {
+            echo "# Alternate Unreal credentials"
+            echo
+            echo '```text'
+            cat "$REPORT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload credential probe evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: unreal-alternate-credential-probe
+          path: ${{ runner.temp }}/unreal-alternate-credentials.txt
+          retention-days: 14
+
+  hosted-runner-scan:
+    name: Preinstalled editor scan · ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2025
+          - macos-15
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - name: Search commands, standard paths, and mounted tool caches
+        shell: bash
+        run: |
+          set -u
+          REPORT="$RUNNER_TEMP/unreal-runner-${RUNNER_OS}.txt"
+          touch "$REPORT"
+          record() { printf '%s\n' "$*" | tee -a "$REPORT"; }
+          record "Runner: ${{ matrix.os }} ($RUNNER_OS/$RUNNER_ARCH)"
+
+          FOUND=""
+          for command_name in UnrealEditor UnrealEditor.exe UnrealEditor-Cmd.exe UE5Editor UE5Editor.exe; do
+            candidate="$(command -v "$command_name" 2>/dev/null || true)"
+            if [[ -n "$candidate" ]]; then
+              FOUND="$candidate"
+              break
+            fi
+          done
+
+          shopt -s nullglob
+          case "$RUNNER_OS" in
+            Linux)
+              candidates=(
+                /opt/UnrealEngine/Engine/Binaries/Linux/UnrealEditor
+                /opt/unreal-engine/Engine/Binaries/Linux/UnrealEditor
+                /usr/local/UnrealEngine/Engine/Binaries/Linux/UnrealEditor
+                "$HOME"/UnrealEngine/Engine/Binaries/Linux/UnrealEditor
+                /opt/hostedtoolcache/UnrealEngine/*/x64/Engine/Binaries/Linux/UnrealEditor
+              )
+              ;;
+            Windows)
+              candidates=(
+                /c/Program\ Files/Epic\ Games/UE_*/Engine/Binaries/Win64/UnrealEditor.exe
+                /c/Program\ Files/Unreal\ Engine/UE_*/Engine/Binaries/Win64/UnrealEditor.exe
+                /c/hostedtoolcache/windows/UnrealEngine/*/x64/Engine/Binaries/Win64/UnrealEditor.exe
+                /d/UnrealEngine/Engine/Binaries/Win64/UnrealEditor.exe
+              )
+              ;;
+            macOS)
+              candidates=(
+                /Users/Shared/Epic\ Games/UE_*/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor
+                /Applications/UnrealEditor.app/Contents/MacOS/UnrealEditor
+                /Users/runner/hostedtoolcache/UnrealEngine/*/x64/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor
+              )
+              ;;
+          esac
+
+          if [[ -z "$FOUND" ]]; then
+            for candidate in "${candidates[@]}"; do
+              if [[ -x "$candidate" ]]; then
+                FOUND="$candidate"
+                break
+              fi
+            done
+          fi
+
+          if [[ -n "$FOUND" ]]; then
+            record "FOUND: $FOUND"
+            "$FOUND" -version >> "$REPORT" 2>&1 || true
+            echo "::notice title=Unreal runner scan::A preinstalled Unreal Editor was found on ${{ matrix.os }}."
+          else
+            record "NOT FOUND: no preinstalled Unreal Editor command or standard installation"
+            echo "::warning title=Unreal runner scan::No preinstalled Unreal Editor on ${{ matrix.os }}."
+          fi
+          df -h 2>/dev/null | head -n 20 >> "$REPORT" || true
+
+          {
+            echo "# Unreal scan — ${{ matrix.os }}"
+            echo
+            echo '```text'
+            cat "$REPORT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload runner scan
+        uses: actions/upload-artifact@v4
+        with:
+          name: unreal-runner-scan-${{ matrix.os }}
+          path: ${{ runner.temp }}/unreal-runner-${{ runner.os }}.txt
+          retention-days: 14
+
+  legal-route-audit:
+    name: Package manager, binary portal, mirror, and public image audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Test remaining acquisition routes
+        shell: bash
+        run: |
+          set -u
+          REPORT="$RUNNER_TEMP/unreal-route-audit.txt"
+          touch "$REPORT"
+          record() { printf '%s\n' "$*" | tee -a "$REPORT"; }
+
+          record "Unreal Engine remaining-route audit"
+          record "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          record ""
+
+          record "[Official precompiled Linux build]"
+          FINAL_URL="$(curl --silent --show-error --location --output "$RUNNER_TEMP/linux-page.html" \
+            --write-out '%{url_effective}' https://www.unrealengine.com/en-US/linux || true)"
+          if grep -qi 'Epic Account Required' "$RUNNER_TEMP/linux-page.html"; then
+            record "BLOCKED: portal redirects to Epic Account Required ($FINAL_URL)"
+          else
+            record "No downloadable archive was exposed without an authenticated Epic session ($FINAL_URL)"
+          fi
+          record ""
+
+          record "[Ubuntu package managers]"
+          APT_MATCHES="$(apt-cache search 'unreal engine|^unreal|^ue5' 2>/dev/null || true)"
+          if [[ -z "$APT_MATCHES" ]]; then
+            record "BLOCKED: no Unreal Editor package in configured APT repositories"
+          else
+            record "$APT_MATCHES"
+          fi
+          if command -v snap >/dev/null && snap find unreal 2>/dev/null | grep -qi unreal; then
+            snap find unreal 2>/dev/null | head -n 20 >> "$REPORT"
+          else
+            record "BLOCKED: no verified Unreal Editor snap route"
+          fi
+          record "AUR/Nix/ue4-docker recipes are installers only and still require Epic-authorized source or binary access."
+          record ""
+
+          record "[Public source mirrors]"
+          MIRROR_STATUS="$(curl --silent --output "$RUNNER_TEMP/mirror.json" --write-out '%{http_code}' \
+            https://api.github.com/repos/folgerwang/UnrealEngine || true)"
+          if [[ "$MIRROR_STATUS" == "200" ]]; then
+            record "REJECTED: an unofficial public UE 4.22 mirror exists, but it is obsolete and bypasses Epic's license-gated distribution."
+          else
+            record "No tested public mirror was available."
+          fi
+          record ""
+
+          record "[Public development containers]"
+          HUB_JSON="$RUNNER_TEMP/dockerhub-tags.json"
+          if curl --silent --show-error --fail \
+              'https://hub.docker.com/v2/repositories/wukakuki/unreal-engine/tags/dev-slim-5.8.3' \
+              > "$HUB_JSON"; then
+            SIZE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("full_size", 0))' "$HUB_JSON")"
+            record "REJECTED: public third-party dev-slim-5.8.3 exists (${SIZE} compressed bytes)."
+            record "Reason: public Engine Tools images are not a compliant distribution route under the Unreal EULA; this image was not pulled or executed."
+          else
+            record "No tested third-party development image was available."
+          fi
+          record "Runtime-only images cannot create, cook, or package an Unreal project because they omit Editor and Engine Tools."
+          record ""
+
+          record "[Capacity check]"
+          df -h / | tee -a "$REPORT"
+          record "The tested third-party image is about 26.8 GB compressed and exceeds a standard runner after extraction even before Android SDK/project build data."
+          record ""
+          record "FINAL: NO_COMPLIANT_UNAUTHENTICATED_DOWNLOAD_ROUTE"
+          echo "::warning title=Unreal route audit::No compliant source, precompiled portal, package-manager, mirror, or public-container workaround is usable without Epic authorization."
+
+          {
+            echo "# Unreal route audit"
+            echo
+            echo '```text'
+            cat "$REPORT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload route audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: unreal-remaining-route-audit
+          path: ${{ runner.temp }}/unreal-route-audit.txt
+          retention-days: 14
+
+  stop-gate:
+    name: Stop before Unity and Godot
+    if: always()
+    needs:
+      - alternate-credentials
+      - hosted-runner-scan
+      - legal-route-audit
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Enforce requested ordering
+        shell: bash
+        run: |
+          if [[ "${{ needs.alternate-credentials.outputs.source_access }}" == "true" || \
+                "${{ needs.alternate-credentials.outputs.container_access }}" == "true" ]]; then
+            echo "::notice title=Engine gate::An authorized Unreal route exists. Do not evaluate Unity or Godot."
+          else
+            echo "::warning title=Engine gate::Unreal workarounds exhausted in the current environment. Stop now; do not evaluate Unity or Godot without a new user instruction."
+          fi
