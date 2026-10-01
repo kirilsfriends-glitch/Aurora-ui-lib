@@ -1,0 +1,180 @@
+name: Probe Unreal then Unity Android toolchains
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a0f376-aurora-ui-lib
+    paths:
+      - ".github/workflows/probe-unreal-unity.yml"
+      - "unity-probe/**"
+
+permissions:
+  contents: read
+
+env:
+  UNITY_VERSION: "6000.3.24f1"
+
+jobs:
+  unreal-access-probe:
+    name: "1 · Unreal Engine access/build probe"
+    runs-on: ubuntu-24.04
+    outputs:
+      usable: ${{ steps.probe.outputs.usable }}
+    steps:
+      - name: Check runner and authorized Epic source access
+        id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set +e
+          REPORT="$RUNNER_TEMP/unreal-probe.txt"
+          {
+            echo "Aurora Strike Unreal Engine probe"
+            echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "Runner: $RUNNER_OS $RUNNER_ARCH"
+            echo
+          } > "$REPORT"
+
+          EDITOR="$(command -v UnrealEditor || command -v UE5Editor || true)"
+          if [[ -n "$EDITOR" ]]; then
+            echo "Preinstalled editor: $EDITOR" | tee -a "$REPORT"
+            BINARY_AVAILABLE=true
+          else
+            echo "Preinstalled editor: unavailable" | tee -a "$REPORT"
+            BINARY_AVAILABLE=false
+          fi
+
+          HTTP_STATUS="$(gh api --include repos/EpicGames/UnrealEngine 2>&1 | tee "$RUNNER_TEMP/unreal-api.txt" | awk '/^HTTP\// {status=$2} END {print status}')"
+          if [[ "$HTTP_STATUS" == "200" ]]; then
+            echo "Epic source repository: authorized (HTTP 200)" | tee -a "$REPORT"
+            SOURCE_AVAILABLE=true
+          else
+            echo "Epic source repository: unavailable to this GitHub identity (HTTP ${HTTP_STATUS:-unknown})" | tee -a "$REPORT"
+            SOURCE_AVAILABLE=false
+          fi
+
+          if [[ "$BINARY_AVAILABLE" == true || "$SOURCE_AVAILABLE" == true ]]; then
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+            echo "Result: an Unreal build route is available." | tee -a "$REPORT"
+          else
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+            echo "Result: no legal Unreal editor/source build route exists on this runner." | tee -a "$REPORT"
+          fi
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Unreal probe evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: unreal-engine-probe
+          path: ${{ runner.temp }}/unreal-probe.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  unity-android-probe:
+    name: "2 · Unity Android output probe"
+    needs: unreal-access-probe
+    runs-on: ubuntu-24.04
+    outputs:
+      usable: ${{ steps.classify.outputs.usable }}
+      activation_material: ${{ steps.activation.outputs.available }}
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inspect legal activation route without exposing secrets
+        id: activation
+        shell: bash
+        run: |
+          if [[ -n "$UNITY_LICENSE" ]] || { [[ -n "$UNITY_EMAIL" ]] && [[ -n "$UNITY_PASSWORD" ]] && [[ -n "$UNITY_SERIAL" ]]; }; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Unity activation material is configured; attempting the Android build." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "No Unity license or account activation material is configured. The unlicensed build attempt below is retained as direct evidence of the blocker." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Attempt Unity 6.3 LTS Android build
+        id: unity_build
+        continue-on-error: true
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ env.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ env.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ env.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ env.UNITY_SERIAL }}
+        with:
+          projectPath: unity-probe
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: Android
+          buildMethod: BuildProbe.BuildAndroid
+          androidExportType: androidPackage
+          allowDirtyBuild: true
+
+      - name: Classify Unity result and validate output
+        id: classify
+        shell: bash
+        run: |
+          mkdir -p engine-probe-results
+          REPORT="engine-probe-results/unity-probe.txt"
+          {
+            echo "Aurora Strike Unity Android probe"
+            echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "Editor requested: $UNITY_VERSION"
+            echo "Activation material configured: ${{ steps.activation.outputs.available }}"
+            echo "Builder outcome: ${{ steps.unity_build.outcome }}"
+          } > "$REPORT"
+
+          APK="$(find unity-probe -type f -name '*.apk' -print -quit)"
+          if [[ "${{ steps.unity_build.outcome }}" == "success" && -n "$APK" ]]; then
+            test -s "$APK"
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+            echo "APK: $APK ($(stat -c '%s' "$APK") bytes)" | tee -a "$REPORT"
+            cp "$APK" engine-probe-results/AuroraUnityEngineProbe.apk
+            echo "Result: Unity produced a non-empty Android APK." | tee -a "$REPORT"
+          else
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+            echo "APK: not produced" | tee -a "$REPORT"
+            echo "Result: no final Unity Android output is available in the current environment." | tee -a "$REPORT"
+          fi
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Unity probe evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-android-probe
+          path: engine-probe-results/
+          if-no-files-found: error
+          retention-days: 14
+
+  engine-decision:
+    name: "3 · Record ordered engine decision"
+    if: always()
+    needs:
+      - unreal-access-probe
+      - unity-android-probe
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Summarize ordered probes
+        shell: bash
+        run: |
+          {
+            echo "# Ordered engine decision"
+            echo
+            echo "1. Unreal usable: \`${{ needs.unreal-access-probe.outputs.usable || 'false' }}\`"
+            echo "2. Unity Android output usable: \`${{ needs.unity-android-probe.outputs.usable || 'false' }}\`"
+            echo "3. Unity activation material present: \`${{ needs.unity-android-probe.outputs.activation_material || 'false' }}\`"
+            echo
+            if [[ "${{ needs.unreal-access-probe.outputs.usable }}" == "true" ]]; then
+              echo "Decision: stop at Unreal; do not use a fallback engine."
+            elif [[ "${{ needs.unity-android-probe.outputs.usable }}" == "true" ]]; then
+              echo "Decision: stop at Unity; do not use Godot."
+            else
+              echo "Decision: Unreal and Unity are blocked after direct probes; the source-built Godot fallback is permitted."
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
