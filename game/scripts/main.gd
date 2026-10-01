@@ -140,14 +140,14 @@ func _build_environment() -> void:
     environment.background_mode = Environment.BG_SKY
     environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
     environment.ambient_light_color = Color("c3d8ff")
-    environment.ambient_light_energy = 1.42
+    environment.ambient_light_energy = 1.9
     environment.ambient_light_sky_contribution = 0.72
     environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
     # Balanced source emissions retain color without relying on a costly or
     # renderer-specific tone mapper.
     environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
     environment.adjustment_enabled = true
-    environment.adjustment_brightness = 1.16
+    environment.adjustment_brightness = 1.28
     environment.adjustment_contrast = 1.03
     environment.adjustment_saturation = 1.08
     # Mobile-friendly clear-space sky: depth comes from gradients and nebula cards,
@@ -163,7 +163,7 @@ func _build_environment() -> void:
 
     sun = DirectionalLight3D.new()
     sun.rotation_degrees = Vector3(-52.0, -38.0, 0.0)
-    sun.light_energy = 1.72
+    sun.light_energy = 2.0
     # Real-time directional shadows were the largest GPU cost on Android.
     # The baked-looking emissive trims keep silhouettes readable without them.
     sun.shadow_enabled = false
@@ -173,7 +173,7 @@ func _build_environment() -> void:
     # arenas where a local OmniLight cannot. Its GPU cost is small and fixed.
     fill_light = DirectionalLight3D.new()
     fill_light.rotation_degrees = Vector3(42.0, 142.0, 0.0)
-    fill_light.light_energy = 0.86
+    fill_light.light_energy = 1.35
     fill_light.shadow_enabled = false
     add_child(fill_light)
 
@@ -337,7 +337,7 @@ func _build_level_shifting_isles() -> void:
 
 func _build_level_polarity_reactor() -> void:
     level_name = "POLARITY REACTOR"
-    level_mechanic = "Activate all 3 polarity beacons. Wind tunnels push the drone while rotating laser arms guard the shards."
+    level_mechanic = "Activate all 3 polarity beacons while wind tunnels and open patrol lanes redirect the drone."
     required_shards = 9
     required_beacons = 3
     spawn_point = Vector3(0.0, 1.1, 11.0)
@@ -350,10 +350,6 @@ func _build_level_polarity_reactor() -> void:
     _add_beacon(Vector3(-11, 0.02, -10))
     _add_beacon(Vector3(11, 0.02, -9))
     _add_beacon(Vector3(-10, 0.02, 10))
-
-    _add_rotating_laser(Vector3(0, 0, 0), 8.0, 1.15)
-    _add_rotating_laser(Vector3(7, 0, 7), 5.0, -1.7)
-    _add_rotating_laser(Vector3(-7, 0, -5), 4.5, 2.1)
 
     _add_wind_zone(Vector3(-6, 1.2, 2), Vector3(5, 2.5, 10), Vector3(8, 0, 0), Color("4fdcff"))
     _add_wind_zone(Vector3(7, 1.2, -4), Vector3(5, 2.5, 9), Vector3(-7, 0, 3), Color("ff55ce"))
@@ -370,7 +366,7 @@ func _build_level_polarity_reactor() -> void:
 
 func _build_level_event_horizon() -> void:
     level_name = "EVENT HORIZON"
-    level_mechanic = "Low gravity, disappearing platforms, faster lasers, and a 105 second stability window. Keep moving."
+    level_mechanic = "Low gravity, disappearing platforms, precision jumps, and a 105 second stability window. Keep moving."
     required_shards = 10
     required_beacons = 2
     time_limit = 105.0
@@ -397,16 +393,12 @@ func _build_level_event_horizon() -> void:
 
     _add_beacon(Vector3(-9, 1.22, 5))
     _add_beacon(Vector3(7, 3.42, -9))
-    _add_rotating_laser(Vector3(-9, 1.2, 5), 4.8, 2.5)
-    _add_rotating_laser(Vector3(7, 3.4, -9), 5.8, -3.0)
-    _add_moving_sentinel(Vector3(9, 2.35, 4), Vector3.RIGHT, 2.2, 2.8, 0.3)
-    _add_moving_sentinel(Vector3(-7, 3.15, -7), Vector3.FORWARD, 2.0, 3.1, 1.7)
 
     for position in [
         Vector3(-2, 1.1, 12), Vector3(2, 1.1, 12),
         Vector3(-9, 2.3, 6), Vector3(-9, 2.3, 3),
         Vector3(9, 2.9, 5), Vector3(9, 2.9, 2),
-        Vector3(-7, 3.7, -6), Vector3(-7, 3.7, -9),
+        Vector3(-5.5, 3.7, -6), Vector3(-8.5, 3.7, -9),
         Vector3(7, 4.5, -7), Vector3(7, 4.5, -11),
     ]:
         _add_shard(position)
@@ -878,15 +870,15 @@ func _add_moving_sentinel(origin: Vector3, axis: Vector3, span: float, speed: fl
     level_root.add_child(area)
     var collision := CollisionShape3D.new()
     var shape := SphereShape3D.new()
-    # Match the visible 0.64-scaled model instead of killing the player in a
-    # large invisible shell around it.
-    shape.radius = 0.68
+    # Deliberately keep the lethal core deep inside the visible red sphere.
+    # Together with the compact player capsule this prevents "air" deaths.
+    shape.radius = 0.30
     collision.shape = shape
     area.add_child(collision)
     var model := SENTINEL_MODEL.instantiate()
     model.scale = Vector3.ONE * 0.64
     area.add_child(model)
-    area.body_entered.connect(_on_hazard_touched.bind("SENTINEL CONTACT — RECALIBRATED"))
+    area.body_entered.connect(_on_hazard_touched.bind(area, "SENTINEL CONTACT — RECALIBRATED"))
     moving_hazards.append(area)
 
 
@@ -910,11 +902,13 @@ func _add_rotating_laser(position: Vector3, length: float, speed: float) -> void
     pivot.add_child(beam)
     var collision := CollisionShape3D.new()
     var shape := BoxShape3D.new()
-    shape.size = Vector3(beam_length, 0.3, 0.32)
+    # Collision is intentionally narrower than the visible beam so the drone
+    # has to visibly overlap it before a contact can be confirmed.
+    shape.size = Vector3(beam_length, 0.1, 0.08)
     collision.shape = shape
     beam.add_child(collision)
     _add_box_visual(beam, Vector3(beam_length, 0.24, 0.32), Vector3.ZERO, Color("ff668c"), 6.0)
-    beam.body_entered.connect(_on_hazard_touched.bind("LASER CONTACT — RECALIBRATED"))
+    beam.body_entered.connect(_on_hazard_touched.bind(beam, "LASER CONTACT — RECALIBRATED"))
     rotating_lasers.append(pivot)
 
 
@@ -994,11 +988,16 @@ func _add_pulse_gate(position: Vector3, size: Vector3, phase: float, color: Colo
     area.set_meta("phase", phase)
     area.set_meta("active", true)
     level_root.add_child(area)
-    var collision := _add_box_collision(area, size)
+    var collision_size := Vector3(size.x, size.y * 0.72, size.z)
+    if size.x < size.z:
+        collision_size.x = minf(size.x, 0.1)
+    else:
+        collision_size.z = minf(size.z, 0.1)
+    var collision := _add_box_collision(area, collision_size)
     area.set_meta("collision", collision)
     _add_box_visual(area, size, Vector3.ZERO, Color(color, 0.42), 3.0, true)
     _add_box_visual(area, Vector3(maxf(size.x, 0.16), size.y + 0.35, maxf(size.z, 0.16)), Vector3.ZERO, Color(color, 0.12), 0.8, true)
-    area.body_entered.connect(_on_hazard_touched.bind("PULSE GATE CONTACT — RECALIBRATED"))
+    area.body_entered.connect(_on_hazard_touched.bind(area, "PULSE GATE CONTACT — RECALIBRATED"))
     pulse_gates.append(area)
 
 
@@ -1139,8 +1138,19 @@ func _on_shard_collected(body: Node3D, shard: Area3D) -> void:
     _update_portal_state()
 
 
-func _on_hazard_touched(body: Node3D, reason: String = "ENERGY IMPACT — RECALIBRATED") -> void:
-    if body == player and hit_cooldown <= 0.0 and level_active:
+func _on_hazard_touched(body: Node3D, source: Area3D, reason: String) -> void:
+    if body != player or hit_cooldown > 0.0 or not level_active:
+        return
+    # Ignore one-frame broad-phase contacts and fast near misses. A lethal hit
+    # now requires the compact collision cores to overlap continuously.
+    await get_tree().create_timer(0.12).timeout
+    if (
+        level_active
+        and hit_cooldown <= 0.0
+        and is_instance_valid(source)
+        and source.monitoring
+        and source.overlaps_body(player)
+    ):
         _reset_player(reason)
 
 
@@ -1458,7 +1468,7 @@ func _get_cached_material(color: Color, emission: float, transparent: bool) -> S
 
 func _make_material(color: Color, emission: float = 0.0, transparent: bool = false, unshaded: bool = false) -> StandardMaterial3D:
     var material := StandardMaterial3D.new()
-    var lifted_color := color.lightened(0.12 if not transparent else 0.06)
+    var lifted_color := color.lightened(0.28 if not transparent else 0.1)
     lifted_color.a = color.a
     material.albedo_color = lifted_color
     material.metallic = 0.3
@@ -1467,7 +1477,7 @@ func _make_material(color: Color, emission: float = 0.0, transparent: bool = fal
     # every phone; a soft emissive baseline avoids dependence on GLES ambient.
     var effective_emission := emission
     if not transparent and not unshaded:
-        effective_emission = maxf(effective_emission, 0.58)
+        effective_emission = maxf(effective_emission, 1.0)
     if effective_emission > 0.0:
         material.emission_enabled = true
         material.emission = Color(lifted_color.r, lifted_color.g, lifted_color.b, 1.0)

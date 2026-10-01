@@ -16,6 +16,16 @@ func _run_campaign_smoke_test() -> void:
     root.add_child(game)
     await process_frame
 
+    var player_capsule: CapsuleShape3D
+    for child in game.player.get_children():
+        if child is CollisionShape3D and child.shape is CapsuleShape3D:
+            player_capsule = child.shape
+            break
+    if player_capsule == null or player_capsule.radius > 0.31:
+        push_error("Player collision core is missing or too large")
+        quit(1)
+        return
+
     for level_index in range(10):
         game._load_level(level_index)
         await process_frame
@@ -23,6 +33,19 @@ func _run_campaign_smoke_test() -> void:
             push_error("Level %d failed to initialize" % (level_index + 1))
             quit(1)
             return
+        if level_index in [2, 3] and (
+            not game.rotating_lasers.is_empty() or not game.moving_hazards.is_empty()
+        ):
+            push_error("Level %d still contains a red lethal hazard" % (level_index + 1))
+            quit(1)
+            return
+        for sentinel in game.moving_hazards:
+            for child in sentinel.get_children():
+                if child is CollisionShape3D and child.shape is SphereShape3D:
+                    if child.shape.radius > 0.31:
+                        push_error("Level %d sentinel collision is too large" % (level_index + 1))
+                        quit(1)
+                        return
         print("CAMPAIGN_SMOKE_LEVEL_OK:", level_index + 1)
 
     game.queue_free()

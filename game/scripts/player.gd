@@ -26,8 +26,10 @@ func _ready() -> void:
 
     var collision := CollisionShape3D.new()
     var shape := CapsuleShape3D.new()
-    shape.radius = 0.48
-    shape.height = 1.2
+    # Keep the arcade collision core well inside the visible drone. This makes
+    # obstacle hits obvious instead of triggering at the wing tips or in air.
+    shape.radius = 0.30
+    shape.height = 0.82
     collision.shape = shape
     add_child(collision)
 

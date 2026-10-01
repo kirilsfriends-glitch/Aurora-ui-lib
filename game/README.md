@@ -2,7 +2,7 @@
 
 A ten-level mobile 3D campaign built with Godot 4.3 and original Blender 4.3 assets.
 
-Current Android release: **v0.4.2**.
+Current Android release: **v0.4.3**.
 
 ## Campaign
 
@@ -12,8 +12,8 @@ Collect the required aurora shards, complete each sector's secondary objective, 
 | --- | --- |
 | Aurora Garden | Core movement, jumping, shards, patrol sentinels |
 | Shifting Isles | Moving platforms, launch pads, void traversal |
-| Polarity Reactor | Beacons, wind zones, rotating lasers |
-| Event Horizon | Low gravity, disappearing platforms, countdown |
+| Polarity Reactor | Beacons, wind zones, open nonlethal patrol lanes |
+| Event Horizon | Low gravity, disappearing platforms, precision jumps, countdown |
 | Gravity Archipelago | Gravity wells, curved jumps, elevated islands |
 | Nova Circuit | Pulse gates, acceleration lanes, timed relays |
 | Radiant Relay | Crossing currents, four relays, overlapping patrols |
@@ -25,9 +25,11 @@ Levels 7–10 focus on increasingly demanding combinations rather than requiring
 
 ## Visibility and hazard fairness
 
-Version 0.4.2 adds an opposite shadow-free directional fill that reaches every edge of large arenas. Red patrol sentinels use constant-speed movement instead of slowing almost to zero at sine-wave endpoints, and their collision radius now follows the visible model. Laser collision matches the bright beam and leaves a safe hub around the static center circle. Pulse gates disable their collision and visual together, while recovery messages identify which hazard was touched.
+Version 0.4.3 removes all red sentinel and rotating-laser hazards from levels 3 and 4. The required level-4 beacons and collectibles can no longer be occupied by a lethal red model; difficulty there comes from wind, low gravity, disappearing platforms, routing, and the timer instead.
 
-The `expand` stretch mode, bright sky and ground gradients, procedural emissive floors, and balanced Blender colors remain enabled.
+The drone capsule radius is `0.30`, the sentinel lethal radius is `0.30`, and laser/pulse-gate collision is narrower than its visible effect. A lethal hit is accepted only after 120 ms of continuous overlap, so a single broad-phase frame or fast near miss cannot reset the player.
+
+Large arenas receive ambient energy `1.9`, brighter exposure, two global shadow-free directional lights, lifted procedural colors, and a minimum opaque emission of `1.0`. Ultrawide `expand` mode and balanced Blender materials remain enabled.
 
 ## Controls
 
@@ -78,7 +80,7 @@ godot --headless --path game --script res://tests/campaign_smoke_test.gd
 ## Android build
 
 ```bash
-godot --headless --export-debug "Android" ../build/android/AuroraDrift3D-v0.4.2-debug.apk
+godot --headless --export-debug "Android" ../build/android/AuroraDrift3D-v0.4.3-debug.apk
 ```
 
 The resulting arm64 APK is signed for sideload testing and published as a GitHub Release asset together with its SHA-256 checksum.

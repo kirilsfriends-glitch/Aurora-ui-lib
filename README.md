@@ -2,7 +2,7 @@
 
 This repository contains the original Lua UI library (`Source.lua`) and **Aurora Drift 3D**, an offline Godot 4.3 campaign for Android and desktop.
 
-## Aurora Drift 3D v0.4.2
+## Aurora Drift 3D v0.4.3
 
 Pilot a Blender-modelled aurora drone through **ten** increasingly difficult neon sectors:
 
@@ -21,7 +21,7 @@ The later sectors deliberately remix existing systems instead of introducing a n
 
 ### Visibility and fair hazards
 
-Version 0.4.2 adds a global shadow-free fill light for wide arenas. Red sentinels move at constant speed without pausing at patrol endpoints, and their hitboxes now match the visible model. Rotating beams have visible matching collision and a safe central hub; pulse-gate collision switches off with the visual. Ultrawide fullscreen, brighter gradients, procedural emissive floors, and balanced Blender colors are retained.
+Version 0.4.3 removes all red sentinel and rotating-laser hazards from levels 3 and 4, including centers previously placed inside required beacons. Drone and sentinel collision cores elsewhere are deliberately smaller than their visible models, and lethal areas require 120 ms of continuous overlap. Large arenas use much brighter ambient energy, exposure, dual shadow-free directional lighting, lifted materials, and stronger emissive floors.
 
 ### Controls and performance
 
