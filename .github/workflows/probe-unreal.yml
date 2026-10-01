@@ -1,0 +1,145 @@
+name: Probe Unreal Engine availability
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a0f376-aurora-ui-lib
+    paths:
+      - ".github/workflows/probe-unreal.yml"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  unreal-engine-probe:
+    name: Unreal Engine editor, source, and container probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Probe every available official Unreal route
+        id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -u
+          REPORT="$RUNNER_TEMP/unreal-engine-probe.txt"
+          touch "$REPORT"
+          record() { printf '%s\n' "$*" | tee -a "$REPORT"; }
+
+          record "Aurora Strike — Unreal Engine availability probe"
+          record "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          record "Runner: $RUNNER_OS $RUNNER_ARCH"
+          record ""
+
+          USABLE=false
+
+          record "[1/5] Preinstalled Unreal Editor"
+          EDITOR="$(command -v UnrealEditor || command -v UnrealEditor-Cmd || command -v UE5Editor || true)"
+          if [[ -n "$EDITOR" ]]; then
+            record "AVAILABLE: $EDITOR"
+            "$EDITOR" -version >> "$REPORT" 2>&1 || true
+            USABLE=true
+          else
+            record "UNAVAILABLE: no UnrealEditor/UE5Editor executable on the runner"
+          fi
+          record ""
+
+          record "[2/5] Existing engine installation directories"
+          INSTALL_FOUND=false
+          for root in /opt/UnrealEngine /opt/unreal-engine /usr/local/UnrealEngine "$HOME/UnrealEngine"; do
+            if [[ -x "$root/Engine/Binaries/Linux/UnrealEditor" ]]; then
+              record "AVAILABLE: $root/Engine/Binaries/Linux/UnrealEditor"
+              INSTALL_FOUND=true
+              USABLE=true
+            else
+              record "UNAVAILABLE: $root"
+            fi
+          done
+          record ""
+
+          record "[3/5] Epic-authorized UnrealEngine source repository"
+          if gh api repos/EpicGames/UnrealEngine > "$RUNNER_TEMP/unreal-repository.json" 2> "$RUNNER_TEMP/unreal-repository.err"; then
+            record "AVAILABLE: GitHub API authorized the private EpicGames/UnrealEngine repository"
+            if git -c credential.helper= -c "http.extraHeader=Authorization: Bearer $GH_TOKEN" \
+                ls-remote https://github.com/EpicGames/UnrealEngine.git refs/heads/release \
+                > "$RUNNER_TEMP/unreal-ls-remote.txt" 2>&1; then
+              record "AVAILABLE: release branch can be read"
+              USABLE=true
+            else
+              record "BLOCKED: API access succeeded but git release branch access failed"
+              sed -E 's#https://[^@]+@#https://***@#g' "$RUNNER_TEMP/unreal-ls-remote.txt" >> "$REPORT"
+            fi
+          else
+            record "UNAVAILABLE: private repository access denied (GitHub returns 404)"
+            tail -n 3 "$RUNNER_TEMP/unreal-repository.err" >> "$REPORT" || true
+          fi
+          record ""
+
+          record "[4/5] Official Unreal Engine development container"
+          CONTAINER_FOUND=false
+          if printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin \
+              > "$RUNNER_TEMP/ghcr-login.txt" 2>&1; then
+            record "GitHub Container Registry authentication accepted; checking Epic package authorization"
+            for tag in dev-5.8 dev-5.7 dev-5.6 dev-4.27; do
+              if docker manifest inspect "ghcr.io/epicgames/unreal-engine:$tag" \
+                  > "$RUNNER_TEMP/manifest-${tag}.json" 2> "$RUNNER_TEMP/manifest-${tag}.err"; then
+                record "AVAILABLE: ghcr.io/epicgames/unreal-engine:$tag"
+                CONTAINER_FOUND=true
+                USABLE=true
+                break
+              else
+                record "UNAVAILABLE: ghcr.io/epicgames/unreal-engine:$tag"
+              fi
+            done
+          else
+            record "UNAVAILABLE: GitHub Container Registry authentication failed"
+          fi
+          record ""
+
+          record "[5/5] Public package-manager route"
+          APT_RESULTS="$(apt-cache search 'unreal engine|^unreal|^ue5' 2>/dev/null || true)"
+          if [[ -n "$APT_RESULTS" ]]; then
+            record "Candidates returned (none are assumed official until verified):"
+            record "$APT_RESULTS"
+          else
+            record "UNAVAILABLE: no Unreal Engine editor package in configured Ubuntu repositories"
+          fi
+          record ""
+
+          if [[ "$USABLE" == true ]]; then
+            record "FINAL: UNREAL_AVAILABLE"
+            record "At least one official engine route is available; stop before evaluating other engines."
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+          else
+            record "FINAL: UNREAL_BLOCKED"
+            record "No editor, installed build, authorized source checkout, official development container, or package-manager installation is available."
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          {
+            echo "# Unreal Engine probe"
+            echo
+            echo '```text'
+            cat "$REPORT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Unreal probe evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: unreal-engine-availability-probe
+          path: ${{ runner.temp }}/unreal-engine-probe.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce engine ordering
+        shell: bash
+        run: |
+          if [[ "${{ steps.probe.outputs.usable }}" == "true" ]]; then
+            echo "Unreal is available. Unity and Godot must not be evaluated."
+          else
+            echo "Unreal is unavailable. Stop here and wait for the user's explicit instruction before evaluating Unity."
+          fi
