@@ -1,0 +1,28 @@
+# Aurora Strike Blender material conversion
+newmtl Machined_Steel
+Kd 0.190000 0.210000 0.230000
+d 1.000000
+Ns 657.000
+Ks 0.88000 0.88000 0.88000
+illum 2
+
+newmtl Polymer_Black
+Kd 0.018000 0.022000 0.025000
+d 1.000000
+Ns 465.000
+Ks 0.12000 0.12000 0.12000
+illum 2
+
+newmtl Aurora_Blue
+Kd 0.020000 0.340000 0.460000
+d 1.000000
+Ns 609.000
+Ks 0.45000 0.45000 0.45000
+illum 2
+
+newmtl Gunmetal
+Kd 0.055000 0.065000 0.075000
+d 1.000000
+Ns 601.000
+Ks 0.82000 0.82000 0.82000
+illum 2

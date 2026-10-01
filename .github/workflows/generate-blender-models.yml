@@ -1,0 +1,85 @@
+name: Generate Aurora Strike Blender Assets
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a0f376-aurora-ui-lib
+    paths:
+      - "tools/generate_shooter_models.py"
+      - ".github/workflows/generate-blender-models.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aurora-strike-blender-assets
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v5
+
+      - name: Cache Blender 4.3.2
+        id: blender-cache
+        uses: actions/cache@v4
+        with:
+          path: .blender/blender-4.3.2-linux-x64
+          key: blender-4.3.2-linux-x64
+
+      - name: Download official Blender build
+        if: steps.blender-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p .blender
+          curl --fail --location --retry 6 --retry-all-errors \
+            --connect-timeout 30 --max-time 900 \
+            https://download.blender.org/release/Blender4.3/blender-4.3.2-linux-x64.tar.xz \
+            -o .blender/blender.tar.xz
+          tar -xJf .blender/blender.tar.xz -C .blender
+          rm .blender/blender.tar.xz
+
+      - name: Generate original models and Blender source
+        run: |
+          set -euo pipefail
+          .blender/blender-4.3.2-linux-x64/blender \
+            --background --factory-startup \
+            --python tools/generate_shooter_models.py
+
+      - name: Validate generated asset set
+        run: |
+          set -euo pipefail
+          assets=(ak47 m4a1 awp glock tactical_operator dockyard_environment)
+          for asset in "${assets[@]}"; do
+            test -s "game/models/$asset.glb"
+          done
+          test -s assets/blender/aurora_strike_assets.blend
+          echo "Generated ${#assets[@]} GLB assets"
+          du -h game/models/*.glb assets/blender/aurora_strike_assets.blend
+
+      - name: Upload Blender asset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurora-strike-blender-assets
+          path: |
+            game/models/*.glb
+            assets/blender/aurora_strike_assets.blend
+          if-no-files-found: error
+
+      - name: Commit generated models
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A game/models assets/blender/aurora_strike_assets.blend
+          if git diff --cached --quiet; then
+            echo "Generated assets are already current."
+          else
+            git commit -m "Generate Aurora Strike Blender assets"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi

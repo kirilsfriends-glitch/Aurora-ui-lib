@@ -1,0 +1,5 @@
+# Blender rolling backup files are local/editor artifacts.
+*.blend1
+*.blend2
+__pycache__/
+*.pyc

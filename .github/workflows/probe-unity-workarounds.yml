@@ -1,0 +1,271 @@
+name: Probe Unity Android and licensing routes
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a0f376-aurora-ui-lib
+    paths:
+      - ".github/workflows/probe-unity-workarounds.yml"
+      - "unity-probe/**"
+
+permissions:
+  contents: read
+
+env:
+  UNITY_VERSION: "6000.3.24f1"
+  GAMECI_CLI_VERSION: "v0.1.70"
+
+jobs:
+  official-unity-cli:
+    name: Official Unity CLI, editor, auth, and license probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Install the official experimental Unity CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/keyrings
+          curl -fsSL https://hub.unity3d.com/linux/keys/public \
+            | sudo gpg --dearmor --yes -o /usr/share/keyrings/Unity_Technologies_ApS.gpg
+          sudo tee /etc/apt/sources.list.d/unity-cli.sources >/dev/null <<'EOF'
+          Types: deb
+          URIs: https://hub.unity3d.com/linux/repos/deb
+          Suites: unstable
+          Components: main
+          Signed-By: /usr/share/keyrings/Unity_Technologies_ApS.gpg
+          EOF
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends unity-cli
+          unity --version
+
+      - name: Probe non-interactive capabilities and activation state
+        shell: bash
+        run: |
+          set +e
+          REPORT="$RUNNER_TEMP/unity-cli-probe.txt"
+          {
+            echo "Unity official CLI probe"
+            echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "Requested Editor: $UNITY_VERSION"
+            echo
+            echo "== CLI version =="
+            unity --version
+            echo
+            echo "== Authentication status =="
+            unity auth status --format json
+            echo "auth_status_exit=$?"
+            echo
+            echo "== Active licenses =="
+            unity license list --format json
+            echo "license_list_exit=$?"
+            echo
+            echo "== License activation help =="
+            unity license activate --help
+            echo
+            echo "== Editor release visibility =="
+            unity releases --help
+            unity releases list --format json 2>/dev/null | head -c 12000
+            echo
+            echo "releases_exit=${PIPESTATUS[0]}"
+            echo
+            echo "== CI preflight =="
+            unity status --format json
+            echo "status_exit=$?"
+          } > "$REPORT" 2>&1
+
+          if grep -q '"success"[[:space:]]*:[[:space:]]*true' "$REPORT" && \
+             grep -qiE 'license|personal|professional' "$REPORT"; then
+            echo "Unity CLI is installed, but an active Editor license must still be confirmed by the Android build." >> "$REPORT"
+          else
+            echo "No active unattended Unity session/license was discovered." >> "$REPORT"
+          fi
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Unity CLI probe::Official Unity CLI installed successfully; Android output is evaluated in the separate build job."
+
+      - name: Upload official CLI evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-unity-cli-probe
+          path: ${{ runner.temp }}/unity-cli-probe.txt
+          retention-days: 14
+
+  unity-android-build:
+    name: Unity 6.3 LTS Android APK probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      usable: ${{ steps.classify.outputs.usable }}
+      activation_material: ${{ steps.activation.outputs.available }}
+      builder_activation: ${{ steps.activation.outputs.builder_available }}
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+      UNITY_LICENSING_SERVER: ${{ secrets.UNITY_LICENSING_SERVER }}
+      UNITY_SERVICE_ACCOUNT_ID: ${{ secrets.UNITY_SERVICE_ACCOUNT_ID }}
+      UNITY_SERVICE_ACCOUNT_SECRET: ${{ secrets.UNITY_SERVICE_ACCOUNT_SECRET }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Free enough disk for the Unity Android image
+        shell: bash
+        run: |
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /usr/local/lib/android || true
+          docker system prune --all --force || true
+          df -h /
+
+      - name: Inspect configured activation routes without exposing values
+        id: activation
+        shell: bash
+        run: |
+          ROUTES=()
+          BUILDER_ROUTES=()
+          if [[ -n "$UNITY_LICENSE" ]]; then
+            ROUTES+=(license-file)
+            BUILDER_ROUTES+=(license-file)
+          fi
+          if [[ -n "$UNITY_SERIAL" ]]; then
+            ROUTES+=(serial-or-named-seat)
+            BUILDER_ROUTES+=(serial-or-named-seat)
+          fi
+          if [[ -n "$UNITY_LICENSING_SERVER" ]]; then
+            ROUTES+=(floating-server)
+            BUILDER_ROUTES+=(floating-server)
+          fi
+          if [[ -n "$UNITY_EMAIL" && -n "$UNITY_PASSWORD" ]]; then
+            ROUTES+=(personal-account)
+            BUILDER_ROUTES+=(personal-account)
+          fi
+          if [[ -n "$UNITY_SERVICE_ACCOUNT_ID" && -n "$UNITY_SERVICE_ACCOUNT_SECRET" ]]; then
+            ROUTES+=(cloud-service-account)
+          fi
+
+          if (( ${#ROUTES[@]} > 0 )); then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Configured Unity activation route count: ${#ROUTES[@]}" >> "$GITHUB_STEP_SUMMARY"
+            printf -- '- `%s`\n' "${ROUTES[@]}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "No Unity license, account, licensing-server, or service-account route is configured." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if (( ${#BUILDER_ROUTES[@]} > 0 )); then
+            echo "builder_available=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Unity activation probe::A non-interactive Editor activation route is configured (${#BUILDER_ROUTES[@]} route(s)); attempting the APK build."
+          else
+            echo "builder_available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Unity activation probe::No license file, serial, licensing server, or Personal account credentials are configured for the Editor."
+          fi
+
+      - name: Attempt modern GameCI personal/paid activation and Android build
+        id: unity_build
+        if: steps.activation.outputs.builder_available == 'true'
+        continue-on-error: true
+        uses: game-ci/unity-builder@v6
+        env:
+          UNITY_LICENSE: ${{ env.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ env.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ env.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ env.UNITY_SERIAL }}
+          UNITY_LICENSING_SERVER: ${{ env.UNITY_LICENSING_SERVER }}
+        with:
+          projectPath: unity-probe
+          unityVersion: ${{ env.UNITY_VERSION }}
+          cliVersion: ${{ env.GAMECI_CLI_VERSION }}
+          targetPlatform: Android
+          buildMethod: BuildProbe.BuildAndroid
+          androidExportType: androidPackage
+          versioning: None
+          allowDirtyBuild: true
+
+      - name: Classify and validate final Android output
+        id: classify
+        shell: bash
+        run: |
+          set +e
+          mkdir -p unity-probe-results
+          REPORT="unity-probe-results/unity-android-probe.txt"
+          {
+            echo "Aurora Strike Unity Android probe"
+            echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "Unity: $UNITY_VERSION"
+            echo "GameCI CLI: $GAMECI_CLI_VERSION"
+            echo "Activation route configured: ${{ steps.activation.outputs.available }}"
+            echo "Builder outcome: ${{ steps.unity_build.outcome }}"
+          } > "$REPORT"
+
+          APK="$(find unity-probe -type f -name '*.apk' -print -quit 2>/dev/null)"
+          if [[ "${{ steps.unity_build.outcome }}" == "success" && -n "$APK" && -s "$APK" ]]; then
+            unzip -t "$APK" >> "$REPORT" 2>&1
+            if [[ $? -eq 0 ]]; then
+              cp "$APK" unity-probe-results/AuroraUnityEngineProbe.apk
+              (cd unity-probe-results && sha256sum AuroraUnityEngineProbe.apk > AuroraUnityEngineProbe.apk.sha256)
+              echo "APK: $APK ($(stat -c '%s' "$APK") bytes)" >> "$REPORT"
+              echo "FINAL: UNITY_ANDROID_USABLE" >> "$REPORT"
+              echo "usable=true" >> "$GITHUB_OUTPUT"
+              echo "::notice title=Unity Android result::UNITY_ANDROID_USABLE — a real APK was built and validated. Stop before Godot and migrate Aurora Strike to Unity."
+            else
+              echo "FINAL: UNITY_APK_CORRUPT" >> "$REPORT"
+              echo "usable=false" >> "$GITHUB_OUTPUT"
+              echo "::warning title=Unity Android result::Builder returned an APK, but ZIP validation failed."
+            fi
+          else
+            echo "APK: not produced" >> "$REPORT"
+            echo "FINAL: UNITY_ANDROID_BLOCKED" >> "$REPORT"
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Unity Android result::UNITY_ANDROID_BLOCKED — no final APK was produced in the current environment."
+          fi
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Unity result and APK when available
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-6.3-android-probe
+          path: unity-probe-results/
+          if-no-files-found: error
+          retention-days: 14
+
+  unity-cloud-route:
+    name: Unity Build Automation configuration probe
+    runs-on: ubuntu-24.04
+    env:
+      UNITY_SERVICE_ACCOUNT_ID: ${{ secrets.UNITY_SERVICE_ACCOUNT_ID }}
+      UNITY_SERVICE_ACCOUNT_SECRET: ${{ secrets.UNITY_SERVICE_ACCOUNT_SECRET }}
+      UNITY_CLOUD_ORG_ID: ${{ secrets.UNITY_CLOUD_ORG_ID }}
+      UNITY_CLOUD_PROJECT_ID: ${{ secrets.UNITY_CLOUD_PROJECT_ID }}
+    steps:
+      - name: Check whether unattended cloud build is configured
+        shell: bash
+        run: |
+          if [[ -n "$UNITY_SERVICE_ACCOUNT_ID" && -n "$UNITY_SERVICE_ACCOUNT_SECRET" && \
+                -n "$UNITY_CLOUD_ORG_ID" && -n "$UNITY_CLOUD_PROJECT_ID" ]]; then
+            echo "::notice title=Unity Cloud route::Unity service account and Build Automation project identifiers are configured."
+            echo "Unity Build Automation appears configured; its credentials were not exposed." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning title=Unity Cloud route::Unity Build Automation is not configured for unattended use in this repository."
+            echo "Unity Build Automation cannot be invoked: service-account and/or cloud project configuration is absent." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  stop-gate:
+    name: Stop before Godot
+    if: always()
+    needs:
+      - official-unity-cli
+      - unity-android-build
+      - unity-cloud-route
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Enforce requested engine ordering
+        shell: bash
+        run: |
+          if [[ "${{ needs.unity-android-build.outputs.usable }}" == "true" ]]; then
+            echo "::notice title=Engine gate::Unity produced Android output. Use Unity and do not evaluate Godot."
+          else
+            echo "::warning title=Engine gate::Unity did not produce Android output. Stop here and wait for explicit user direction before Godot."
+          fi

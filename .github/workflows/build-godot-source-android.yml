@@ -1,0 +1,198 @@
+name: Build Aurora Strike with source-built Godot 4.7.2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a0f376-aurora-ui-lib
+    paths:
+      - "game/**"
+      - ".github/workflows/build-godot-source-android.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aurora-strike-source-godot-android
+  cancel-in-progress: true
+
+env:
+  GODOT_TAG: 4.7.2-stable
+  APK_NAME: AuroraStrike-Godot4.7.2-Source-v0.3.0-alpha.apk
+  RELEASE_TAG: aurora-strike-godot-4.7.2-source-v0.3.0-alpha
+  NDK_VERSION: 28.1.13356709
+
+jobs:
+  build-engine-and-game:
+    name: Compile engine, template, test, and publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out Aurora Strike
+        uses: actions/checkout@v5
+
+      - name: Free build disk space
+        run: |
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/local/lib/android/sdk/ndk-bundle || true
+          df -h
+
+      - name: Install native build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config git python3-venv \
+            libx11-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev \
+            libglu1-mesa-dev libasound2-dev libpulse-dev libudev-dev \
+            libxi-dev libxrandr-dev libwayland-dev libxkbcommon-dev \
+            libfontconfig1-dev libdbus-1-dev
+          python3 -m venv .engine-tools
+          .engine-tools/bin/pip install --disable-pip-version-check "scons>=4.4,<5"
+          .engine-tools/bin/scons --version
+          java -version
+
+      - name: Install Godot 4.7 Android toolchain
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.1" \
+            "ndk;${NDK_VERSION}"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Check out official Godot source tag
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$GODOT_TAG" \
+            https://github.com/godotengine/godot.git .godot-engine-source
+          SOURCE_COMMIT="$(git -C .godot-engine-source rev-parse HEAD)"
+          test -n "$SOURCE_COMMIT"
+          echo "GODOT_SOURCE_COMMIT=$SOURCE_COMMIT" >> "$GITHUB_ENV"
+          printf 'Godot tag: %s\nGodot source commit: %s\nSource: https://github.com/godotengine/godot\n' \
+            "$GODOT_TAG" "$SOURCE_COMMIT" | tee GODOT_SOURCE_PROVENANCE.txt
+
+      - name: Restore SCons object cache
+        uses: actions/cache@v4
+        with:
+          path: .scons-cache/godot-4.7.2
+          key: ${{ runner.os }}-godot-4.7.2-source-${{ hashFiles('.github/workflows/build-godot-source-android.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-godot-4.7.2-source-
+
+      - name: Compile Godot 4.7.2 editor from source
+        working-directory: .godot-engine-source
+        run: |
+          set -euo pipefail
+          ../.engine-tools/bin/scons -j2 \
+            platform=linuxbsd target=editor arch=x86_64 \
+            debug_symbols=no lto=none \
+            cache_path="$GITHUB_WORKSPACE/.scons-cache/godot-4.7.2"
+          EDITOR="$(find bin -maxdepth 1 -type f -name 'godot.linuxbsd.editor.x86_64*' | head -n 1)"
+          test -x "$EDITOR"
+          "$EDITOR" --headless --version | tee "$GITHUB_WORKSPACE/GODOT_BUILT_VERSION.txt"
+          echo "GODOT_EDITOR=$GITHUB_WORKSPACE/.godot-engine-source/$EDITOR" >> "$GITHUB_ENV"
+
+      - name: Compile arm64 Android debug template from source
+        working-directory: .godot-engine-source
+        run: |
+          set -euo pipefail
+          ../.engine-tools/bin/scons -j2 \
+            platform=android target=template_debug arch=arm64 \
+            generate_android_binaries=yes debug_symbols=no lto=none \
+            cache_path="$GITHUB_WORKSPACE/.scons-cache/godot-4.7.2"
+          test -s bin/android_debug.apk
+          mkdir -p "$GITHUB_WORKSPACE/build/custom" "$GITHUB_WORKSPACE/build/android"
+          cp bin/android_debug.apk "$GITHUB_WORKSPACE/build/custom/android_debug.apk"
+          ls -lh bin/android_debug.apk
+
+      - name: Point project at the source-built template
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          preset = Path('game/export_presets.cfg')
+          text = preset.read_text()
+          text = text.replace('custom_template/debug=""', 'custom_template/debug="../build/custom/android_debug.apk"')
+          preset.write_text(text)
+          PY
+          grep -F 'custom_template/debug="../build/custom/android_debug.apk"' game/export_presets.cfg
+
+      - name: Import and runtime-test with source-built editor
+        run: |
+          set -euo pipefail
+          "$GODOT_EDITOR" --headless --path game --editor --quit
+          "$GODOT_EDITOR" --headless --path game --script res://tests/shooter_smoke_test.gd
+
+      - name: Export Android APK with source-built engine and template
+        run: |
+          set -euo pipefail
+          "$GODOT_EDITOR" --headless --path game --verbose \
+            --export-debug "Android" \
+            "$GITHUB_WORKSPACE/build/android/$APK_NAME" \
+            2>&1 | tee build/android/export.log
+          APK="build/android/$APK_NAME"
+          test -s "$APK"
+          unzip -t "$APK"
+          unzip -l "$APK" | grep -F "lib/arm64-v8a/libgodot_android.so"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          "$APKSIGNER" verify --verbose "$APK"
+          (cd build/android && sha256sum "$APK_NAME" > "$APK_NAME.sha256")
+          cp GODOT_SOURCE_PROVENANCE.txt GODOT_BUILT_VERSION.txt build/android/
+          ls -lh build/android/
+          cat "build/android/$APK_NAME.sha256"
+
+      - name: Upload source-build evidence and APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurora-strike-godot-4.7.2-source-build
+          path: |
+            build/android/${{ env.APK_NAME }}
+            build/android/${{ env.APK_NAME }}.sha256
+            build/android/GODOT_SOURCE_PROVENANCE.txt
+            build/android/GODOT_BUILT_VERSION.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish source-built alpha pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK="build/android/$APK_NAME"
+          CHECKSUM="$APK.sha256"
+          NOTES=$(cat <<EOF
+          ## Aurora Strike — Godot 4.7.2 source-build alpha
+
+          This Android APK was compiled with an editor and arm64 export template built in CI directly from the official Godot Engine source tag \`${GODOT_TAG}\`.
+
+          **Engine provenance**
+
+          - Upstream: https://github.com/godotengine/godot
+          - Tag: \`${GODOT_TAG}\`
+          - Commit: \`${GODOT_SOURCE_COMMIT}\`
+          - Editor and Android template were compiled in the same workflow as the game export.
+
+          This remains an alpha vertical slice for device testing: Dockyard / Night, four weapons, 5v5 Team Deathmatch, tactical bots, rebuilt UI/HUD, original audio, and Blender assets.
+
+          The APK is arm64-v8a and debug-signed. The checksum and source provenance files are attached.
+          EOF
+          )
+          files=("$APK" "$CHECKSUM" GODOT_SOURCE_PROVENANCE.txt GODOT_BUILT_VERSION.txt)
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+            gh release edit "$RELEASE_TAG" \
+              --target "$GITHUB_SHA" \
+              --title "Aurora Strike — Godot 4.7.2 Source Build (Android Alpha)" \
+              --notes "$NOTES" --prerelease
+          else
+            gh release create "$RELEASE_TAG" "${files[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "Aurora Strike — Godot 4.7.2 Source Build (Android Alpha)" \
+              --notes "$NOTES" --prerelease
+          fi
