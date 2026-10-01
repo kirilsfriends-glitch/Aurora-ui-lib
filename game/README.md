@@ -2,7 +2,7 @@
 
 A ten-level mobile 3D campaign built with Godot 4.3 and original Blender 4.3 assets.
 
-Current Android release: **v0.4.1**.
+Current Android release: **v0.4.2**.
 
 ## Campaign
 
@@ -23,9 +23,11 @@ Collect the required aurora shards, complete each sector's secondary objective, 
 
 Levels 7–10 focus on increasingly demanding combinations rather than requiring a unique mechanic on every stage.
 
-## Fullscreen and visibility update
+## Visibility and hazard fairness
 
-Version 0.4.1 uses `expand` stretch mode so the 3D viewport and HUD fill ultrawide displays without black side bars. Sky and ground gradients are substantially brighter, every opaque procedural platform has a minimum emissive luminance, and AgX tone mapping preserves saturated model colors. Blender's dark alloys now receive soft self-illumination while high-energy cyan, violet, white, and magenta materials are balanced to avoid flat white clipping. The result remains shadow-free and mobile-friendly.
+Version 0.4.2 adds an opposite shadow-free directional fill that reaches every edge of large arenas. Red patrol sentinels use constant-speed movement instead of slowing almost to zero at sine-wave endpoints, and their collision radius now follows the visible model. Laser collision matches the bright beam and leaves a safe hub around the static center circle. Pulse gates disable their collision and visual together, while recovery messages identify which hazard was touched.
+
+The `expand` stretch mode, bright sky and ground gradients, procedural emissive floors, and balanced Blender colors remain enabled.
 
 ## Controls
 
@@ -76,7 +78,7 @@ godot --headless --path game --script res://tests/campaign_smoke_test.gd
 ## Android build
 
 ```bash
-godot --headless --export-debug "Android" ../build/android/AuroraDrift3D-v0.4.1-debug.apk
+godot --headless --export-debug "Android" ../build/android/AuroraDrift3D-v0.4.2-debug.apk
 ```
 
 The resulting arm64 APK is signed for sideload testing and published as a GitHub Release asset together with its SHA-256 checksum.

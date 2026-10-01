@@ -20,6 +20,7 @@ var world_environment: WorldEnvironment
 var environment: Environment
 var sky_material: ProceduralSkyMaterial
 var sun: DirectionalLight3D
+var fill_light: DirectionalLight3D
 var accent_light: OmniLight3D
 
 var current_level := 0
@@ -139,7 +140,7 @@ func _build_environment() -> void:
     environment.background_mode = Environment.BG_SKY
     environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
     environment.ambient_light_color = Color("c3d8ff")
-    environment.ambient_light_energy = 1.24
+    environment.ambient_light_energy = 1.42
     environment.ambient_light_sky_contribution = 0.72
     environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
     # Balanced source emissions retain color without relying on a costly or
@@ -167,6 +168,14 @@ func _build_environment() -> void:
     # The baked-looking emissive trims keep silhouettes readable without them.
     sun.shadow_enabled = false
     add_child(sun)
+
+    # A shadow-free opposite directional fill reaches the edges of 38-unit
+    # arenas where a local OmniLight cannot. Its GPU cost is small and fixed.
+    fill_light = DirectionalLight3D.new()
+    fill_light.rotation_degrees = Vector3(42.0, 142.0, 0.0)
+    fill_light.light_energy = 0.86
+    fill_light.shadow_enabled = false
+    add_child(fill_light)
 
     accent_light = OmniLight3D.new()
     accent_light.position = Vector3(0.0, 10.0, 0.0)
@@ -692,6 +701,7 @@ func _apply_palette(background: Color, horizon: Color, accent: Color, secondary:
     sky_material.ground_horizon_color = horizon.lightened(0.12)
     sky_material.ground_curve = 0.22
     sun.light_color = accent.lerp(Color.WHITE, 0.68)
+    fill_light.light_color = secondary.lerp(Color.WHITE, 0.52)
     accent_light.light_color = accent.lightened(0.16)
     environment.ambient_light_color = secondary.lightened(0.56)
     environment.fog_light_color = bright_horizon
@@ -868,13 +878,15 @@ func _add_moving_sentinel(origin: Vector3, axis: Vector3, span: float, speed: fl
     level_root.add_child(area)
     var collision := CollisionShape3D.new()
     var shape := SphereShape3D.new()
-    shape.radius = 0.9
+    # Match the visible 0.64-scaled model instead of killing the player in a
+    # large invisible shell around it.
+    shape.radius = 0.68
     collision.shape = shape
     area.add_child(collision)
     var model := SENTINEL_MODEL.instantiate()
     model.scale = Vector3.ONE * 0.64
     area.add_child(model)
-    area.body_entered.connect(_on_hazard_touched)
+    area.body_entered.connect(_on_hazard_touched.bind("SENTINEL CONTACT — RECALIBRATED"))
     moving_hazards.append(area)
 
 
@@ -889,16 +901,20 @@ func _add_rotating_laser(position: Vector3, length: float, speed: float) -> void
     center_model.position.y = 0.85
     pivot.add_child(center_model)
 
+    # Keep a safe hub around the static circle. Previously the invisible beam
+    # collision started at its center, making beacons placed there impassable.
+    var hub_radius := 1.15
+    var beam_length := maxf(0.5, length - hub_radius)
     var beam := Area3D.new()
-    beam.position = Vector3(length * 0.5, 0.78, 0)
+    beam.position = Vector3(hub_radius + beam_length * 0.5, 0.8, 0)
     pivot.add_child(beam)
     var collision := CollisionShape3D.new()
     var shape := BoxShape3D.new()
-    shape.size = Vector3(length, 0.65, 0.45)
+    shape.size = Vector3(beam_length, 0.3, 0.32)
     collision.shape = shape
     beam.add_child(collision)
-    _add_box_visual(beam, Vector3(length, 0.18, 0.28), Vector3.ZERO, Color("ff386f"), 4.0)
-    beam.body_entered.connect(_on_hazard_touched)
+    _add_box_visual(beam, Vector3(beam_length, 0.24, 0.32), Vector3.ZERO, Color("ff668c"), 6.0)
+    beam.body_entered.connect(_on_hazard_touched.bind("LASER CONTACT — RECALIBRATED"))
     rotating_lasers.append(pivot)
 
 
@@ -982,7 +998,7 @@ func _add_pulse_gate(position: Vector3, size: Vector3, phase: float, color: Colo
     area.set_meta("collision", collision)
     _add_box_visual(area, size, Vector3.ZERO, Color(color, 0.42), 3.0, true)
     _add_box_visual(area, Vector3(maxf(size.x, 0.16), size.y + 0.35, maxf(size.z, 0.16)), Vector3.ZERO, Color(color, 0.12), 0.8, true)
-    area.body_entered.connect(_on_hazard_touched)
+    area.body_entered.connect(_on_hazard_touched.bind("PULSE GATE CONTACT — RECALIBRATED"))
     pulse_gates.append(area)
 
 
@@ -1020,13 +1036,21 @@ func _add_portal(center: Vector3) -> void:
 
 func _move_dynamic_obstacles() -> void:
     var time := Time.get_ticks_msec() / 1000.0
+    var delta := get_physics_process_delta_time()
     for hazard in moving_hazards:
         if not is_instance_valid(hazard):
             continue
         var origin: Vector3 = hazard.get_meta("origin")
         var axis: Vector3 = hazard.get_meta("axis")
-        hazard.position = origin + axis * sin(time * float(hazard.get_meta("speed")) + float(hazard.get_meta("phase"))) * float(hazard.get_meta("span"))
-        hazard.rotation.y += 0.035
+        # A triangle wave has constant speed. The old sine wave decelerated to
+        # almost zero at both ends, which looked like a frozen red sentinel.
+        var cycle := fmod(
+            time * float(hazard.get_meta("speed")) * 0.64 + float(hazard.get_meta("phase")),
+            4.0
+        )
+        var travel := 1.0 - absf(cycle - 2.0)
+        hazard.position = origin + axis * travel * float(hazard.get_meta("span"))
+        hazard.rotation.y += 1.8 * delta
     for platform in moving_platforms:
         if not is_instance_valid(platform):
             continue
@@ -1035,7 +1059,7 @@ func _move_dynamic_obstacles() -> void:
         platform.position = origin + axis * sin(time * float(platform.get_meta("speed")) + float(platform.get_meta("phase"))) * float(platform.get_meta("span"))
     for laser in rotating_lasers:
         if is_instance_valid(laser):
-            laser.rotation.y += float(laser.get_meta("speed")) * get_physics_process_delta_time()
+            laser.rotation.y += float(laser.get_meta("speed")) * delta
 
 
 func _update_vanishing_platforms() -> void:
@@ -1064,8 +1088,10 @@ func _update_pulse_gates() -> void:
         var active := fmod(time + float(gate.get_meta("phase")), 4.2) < 2.55
         if active != bool(gate.get_meta("active")):
             gate.set_meta("active", active)
-            gate.visible = active
+            var collision: CollisionShape3D = gate.get_meta("collision")
+            collision.set_deferred("disabled", not active)
             gate.set_deferred("monitoring", active)
+            gate.set_deferred("visible", active)
 
 
 func _apply_wind(delta: float) -> void:
@@ -1113,9 +1139,9 @@ func _on_shard_collected(body: Node3D, shard: Area3D) -> void:
     _update_portal_state()
 
 
-func _on_hazard_touched(body: Node3D) -> void:
+func _on_hazard_touched(body: Node3D, reason: String = "ENERGY IMPACT — RECALIBRATED") -> void:
     if body == player and hit_cooldown <= 0.0 and level_active:
-        _reset_player("ENERGY IMPACT — RECALIBRATED")
+        _reset_player(reason)
 
 
 func _on_jump_pad_touched(body: Node3D, pad: Area3D) -> void:
