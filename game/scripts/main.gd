@@ -142,7 +142,8 @@ func _build_environment() -> void:
     environment.ambient_light_energy = 1.24
     environment.ambient_light_sky_contribution = 0.72
     environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
-    environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+    # AgX retains color in bright emissive parts instead of clipping them white.
+    environment.tonemap_mode = Environment.TONE_MAPPER_AGX
     environment.adjustment_enabled = true
     environment.adjustment_brightness = 1.16
     environment.adjustment_contrast = 1.03
@@ -681,13 +682,13 @@ func _build_level_aurora_apex() -> void:
 func _apply_palette(background: Color, horizon: Color, accent: Color, secondary: Color) -> void:
     # Keep the space mood while lifting the playable silhouettes well above
     # black. This is cheaper and more consistent than restoring mobile shadows.
-    var bright_top := background.lightened(0.18)
-    var bright_horizon := horizon.lightened(0.24)
+    var bright_top := background.lerp(horizon, 0.28).lightened(0.32)
+    var bright_horizon := horizon.lightened(0.40)
     sky_material.sky_top_color = bright_top
     sky_material.sky_horizon_color = bright_horizon
-    sky_material.sky_curve = 0.16
-    sky_material.ground_bottom_color = background.lightened(0.06)
-    sky_material.ground_horizon_color = horizon.darkened(0.08)
+    sky_material.sky_curve = 0.2
+    sky_material.ground_bottom_color = background.lightened(0.22)
+    sky_material.ground_horizon_color = horizon.lightened(0.12)
     sky_material.ground_curve = 0.22
     sun.light_color = accent.lerp(Color.WHITE, 0.68)
     accent_light.light_color = accent.lightened(0.16)
@@ -1435,10 +1436,15 @@ func _make_material(color: Color, emission: float = 0.0, transparent: bool = fal
     material.albedo_color = lifted_color
     material.metallic = 0.3
     material.roughness = 0.34
-    if emission > 0.0:
+    # Opaque procedural floors and rails need a stable minimum luminance on
+    # every phone; a soft emissive baseline avoids dependence on GLES ambient.
+    var effective_emission := emission
+    if not transparent and not unshaded:
+        effective_emission = maxf(effective_emission, 0.58)
+    if effective_emission > 0.0:
         material.emission_enabled = true
-        material.emission = Color(color.r, color.g, color.b, 1.0).lightened(0.08)
-        material.emission_energy_multiplier = emission
+        material.emission = Color(lifted_color.r, lifted_color.g, lifted_color.b, 1.0)
+        material.emission_energy_multiplier = effective_emission
     if transparent or color.a < 1.0:
         material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     if unshaded:

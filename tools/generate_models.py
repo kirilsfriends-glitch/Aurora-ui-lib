@@ -290,13 +290,15 @@ def build_beacon(mats):
 def main():
     clear_scene()
     mats = {
-        "shell": material("Aurora Alloy", (0.08, 0.18, 0.42, 1), 0.7, 0.2),
-        "dark": material("Midnight Metal", (0.015, 0.025, 0.08, 1), 0.85, 0.18),
-        "glass": material("Polarized Canopy", (0.12, 0.55, 0.9, 1), 0.35, 0.1, 0.45),
-        "cyan": material("Aurora Cyan", (0.08, 0.95, 0.78, 1), 0.25, 0.18, 4.0),
-        "violet": material("Aurora Violet", (0.55, 0.18, 1.0, 1), 0.3, 0.2, 2.6),
-        "hot": material("Energy White", (0.65, 0.95, 1.0, 1), 0.05, 0.12, 6.0),
-        "danger": material("Hazard Magenta", (1.0, 0.05, 0.3, 1), 0.35, 0.2, 3.4),
+        # Low, controlled emission keeps every model readable without blowing
+        # saturated colors out to white on Android GLES renderers.
+        "shell": material("Aurora Alloy", (0.11, 0.26, 0.55, 1), 0.62, 0.25, 0.38),
+        "dark": material("Midnight Metal", (0.04, 0.07, 0.16, 1), 0.72, 0.25, 0.24),
+        "glass": material("Polarized Canopy", (0.1, 0.48, 0.82, 1), 0.3, 0.14, 0.55),
+        "cyan": material("Aurora Cyan", (0.05, 0.72, 0.62, 1), 0.2, 0.22, 1.6),
+        "violet": material("Aurora Violet", (0.46, 0.12, 0.82, 1), 0.24, 0.24, 1.3),
+        "hot": material("Energy White", (0.5, 0.78, 0.95, 1), 0.05, 0.18, 2.2),
+        "danger": material("Hazard Magenta", (0.88, 0.05, 0.24, 1), 0.28, 0.24, 1.8),
     }
 
     builders = [

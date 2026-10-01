@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  APK_NAME: AuroraDrift3D-v0.4.0-debug.apk
-  RELEASE_TAG: aurora-drift-3d-v0.4.0
+  APK_NAME: AuroraDrift3D-v0.4.1-debug.apk
+  RELEASE_TAG: aurora-drift-3d-v0.4.1
 
 jobs:
   build-android:
@@ -98,17 +98,17 @@ jobs:
           APK="build/android/$APK_NAME"
           CHECKSUM="$APK.sha256"
           NOTES=$(cat <<'EOF'
-          ## Aurora Drift 3D v0.4.0
+          ## Aurora Drift 3D v0.4.1
 
-          A brighter ten-level offline 3D campaign made with Godot 4.3 and original Blender 4.3 assets.
+          A display and visibility hotfix for the ten-level Godot 4.3 campaign.
 
-          **Four new challenge sectors:** Radiant Relay, Fractured Ascent, Chromatic Tempest, and Aurora Apex remix gravity wells, currents, moving and vanishing platforms, pulse gates, sentinels, and lasers with steadily higher difficulty.
+          **True ultrawide fullscreen:** stretch mode now expands the 3D viewport and HUD to fill modern phone displays instead of preserving 16:9 with black side bars.
 
-          **Brighter presentation:** lifted ambient illumination, exposure, materials, horizons, aurora ribbons, and planets improve visibility without restoring expensive real-time shadows.
+          **Clearly visible arenas:** brighter sky and ground gradients plus a stable emissive baseline make floors, rails, and platforms readable on GLES devices where ambient sky lighting can be weak.
 
-          **True multitouch controls:** use the floating analog stick, jump, and rotate the camera at the same time. Desktop movement remains camera-relative with mouse orbit and `Q` / `E` support.
+          **Restored model colors:** Blender materials use balanced self-illumination and AgX tone mapping, preventing cyan, violet, and magenta details from clipping to flat white.
 
-          **Mobile optimization retained:** single-mesh GLB exports, billboard stars, reduced dynamic lights, shared resources, and FSR rendering keep the expanded campaign efficient.
+          Mobile optimization, ten campaign levels, and independent multitouch movement, jump, and camera controls are retained.
 
           The APK targets arm64-v8a Android devices. It works offline, requests no sensitive permissions, and is signed with a debug key for direct sideloading and testing.
 
@@ -122,6 +122,6 @@ jobs:
             gh release create "$RELEASE_TAG" \
               "$APK" "$CHECKSUM" \
               --target "$GITHUB_SHA" \
-              --title "Aurora Drift 3D v0.4.0 (Android)" \
+              --title "Aurora Drift 3D v0.4.1 (Android)" \
               --notes "$NOTES"
           fi

@@ -2,7 +2,7 @@
 
 A ten-level mobile 3D campaign built with Godot 4.3 and original Blender 4.3 assets.
 
-Current Android release: **v0.4.0**.
+Current Android release: **v0.4.1**.
 
 ## Campaign
 
@@ -23,9 +23,9 @@ Collect the required aurora shards, complete each sector's secondary objective, 
 
 Levels 7–10 focus on increasingly demanding combinations rather than requiring a unique mechanic on every stage.
 
-## Visibility update
+## Fullscreen and visibility update
 
-Version 0.4.0 increases ambient energy and exposure, lifts procedural material colors, brightens every sky horizon, and strengthens emissive planets and aurora ribbons. The result remains shadow-free and mobile-friendly, avoiding the expensive real-time lights that caused the earlier performance problems.
+Version 0.4.1 uses `expand` stretch mode so the 3D viewport and HUD fill ultrawide displays without black side bars. Sky and ground gradients are substantially brighter, every opaque procedural platform has a minimum emissive luminance, and AgX tone mapping preserves saturated model colors. Blender's dark alloys now receive soft self-illumination while high-energy cyan, violet, white, and magenta materials are balanced to avoid flat white clipping. The result remains shadow-free and mobile-friendly.
 
 ## Controls
 
@@ -76,7 +76,7 @@ godot --headless --path game --script res://tests/campaign_smoke_test.gd
 ## Android build
 
 ```bash
-godot --headless --export-debug "Android" ../build/android/AuroraDrift3D-v0.4.0-debug.apk
+godot --headless --export-debug "Android" ../build/android/AuroraDrift3D-v0.4.1-debug.apk
 ```
 
 The resulting arm64 APK is signed for sideload testing and published as a GitHub Release asset together with its SHA-256 checksum.

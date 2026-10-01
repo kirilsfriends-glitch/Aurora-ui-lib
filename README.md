@@ -2,7 +2,7 @@
 
 This repository contains the original Lua UI library (`Source.lua`) and **Aurora Drift 3D**, an offline Godot 4.3 campaign for Android and desktop.
 
-## Aurora Drift 3D v0.4.0
+## Aurora Drift 3D v0.4.1
 
 Pilot a Blender-modelled aurora drone through **ten** increasingly difficult neon sectors:
 
@@ -19,9 +19,9 @@ Pilot a Blender-modelled aurora drone through **ten** increasingly difficult neo
 
 The later sectors deliberately remix existing systems instead of introducing a new rule every time. Difficulty rises through denser combinations, faster hazards, more objectives, vertical routes, low gravity, and stricter timers.
 
-### Brighter presentation
+### Fullscreen and visibility
 
-Version 0.4.0 lifts ambient illumination, exposure, surface colors, horizons, planets, and aurora ribbons. Playable objects remain clearly visible while the optimized shadow-free mobile lighting path is retained.
+Version 0.4.1 expands the viewport on ultrawide phones, removing the 16:9 black side bars. Sky and ground gradients are substantially brighter, procedural floors use a stable emissive baseline, and balanced Blender emission with AgX tone mapping preserves cyan, violet, and magenta detail instead of clipping models to white. The optimized shadow-free mobile lighting path is retained.
 
 ### Controls and performance
 
