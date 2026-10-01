@@ -10,7 +10,7 @@ const JUMP_PAD_MODEL := preload("res://models/jump_pad.glb")
 const PLATFORM_MODEL := preload("res://models/moving_platform.glb")
 const BEACON_MODEL := preload("res://models/switch_beacon.glb")
 
-const LEVEL_COUNT := 6
+const LEVEL_COUNT := 10
 
 var player: CharacterBody3D
 var orbit_camera: Camera3D
@@ -138,21 +138,29 @@ func _build_environment() -> void:
     environment.sky = sky
     environment.background_mode = Environment.BG_SKY
     environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-    environment.ambient_light_energy = 0.82
+    environment.ambient_light_color = Color("c3d8ff")
+    environment.ambient_light_energy = 1.24
+    environment.ambient_light_sky_contribution = 0.72
     environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
     environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+    environment.adjustment_enabled = true
+    environment.adjustment_brightness = 1.16
+    environment.adjustment_contrast = 1.03
+    environment.adjustment_saturation = 1.08
     # Mobile-friendly clear-space sky: depth comes from gradients and nebula cards,
     # not full-screen fog or volumetrics.
     environment.fog_enabled = false
     sky_material.sun_angle_max = 7.0
     sky_material.sun_curve = 0.08
-    sky_material.sun_energy_multiplier = 2.2
+    sky_material.sun_energy_multiplier = 3.0
+    sky_material.sky_energy_multiplier = 1.32
+    sky_material.ground_energy_multiplier = 1.12
     world_environment.environment = environment
     add_child(world_environment)
 
     sun = DirectionalLight3D.new()
     sun.rotation_degrees = Vector3(-52.0, -38.0, 0.0)
-    sun.light_energy = 1.25
+    sun.light_energy = 1.72
     # Real-time directional shadows were the largest GPU cost on Android.
     # The baked-looking emissive trims keep silhouettes readable without them.
     sun.shadow_enabled = false
@@ -160,8 +168,8 @@ func _build_environment() -> void:
 
     accent_light = OmniLight3D.new()
     accent_light.position = Vector3(0.0, 10.0, 0.0)
-    accent_light.omni_range = 20.0
-    accent_light.light_energy = 1.8
+    accent_light.omni_range = 28.0
+    accent_light.light_energy = 2.45
     add_child(accent_light)
 
     unit_box_mesh = BoxMesh.new()
@@ -225,6 +233,14 @@ func _load_level(index: int) -> void:
             _build_level_gravity_archipelago()
         5:
             _build_level_nova_circuit()
+        6:
+            _build_level_radiant_relay()
+        7:
+            _build_level_fractured_ascent()
+        8:
+            _build_level_chromatic_tempest()
+        9:
+            _build_level_aurora_apex()
 
     var gravity_scale := 1.0
     if current_level == 3:
@@ -233,6 +249,14 @@ func _load_level(index: int) -> void:
         gravity_scale = 0.76
     elif current_level == 5:
         gravity_scale = 0.68
+    elif current_level == 6:
+        gravity_scale = 0.9
+    elif current_level == 7:
+        gravity_scale = 0.72
+    elif current_level == 8:
+        gravity_scale = 0.82
+    elif current_level == 9:
+        gravity_scale = 0.64
     player.set_gravity_multiplier(gravity_scale)
     player.reset_to(spawn_point)
     player.set_controls_enabled(false)
@@ -461,16 +485,214 @@ func _build_level_nova_circuit() -> void:
     _add_portal(Vector3(0.0, 1.8, -14.0))
 
 
+func _build_level_radiant_relay() -> void:
+    level_name = "RADIANT RELAY"
+    level_mechanic = "A faster remix of reactor hazards: four relays, crossing current lanes, pulse gates, and overlapping laser patrols."
+    required_shards = 12
+    required_beacons = 4
+    spawn_point = Vector3(0.0, 1.1, 14.0)
+    _apply_palette(Color("08253d"), Color("2587a5"), Color("7effe8"), Color("ffd86a"))
+
+    _add_static_platform(Vector3(0, -0.5, 0), Vector3(34, 1, 34), Color("185071"), false)
+    _add_edge_rails(17.0, 17.0, 0.0)
+    _add_pylons(16.0, 0.0, Color("7effe8"))
+
+    for position in [
+        Vector3(-13, 0.02, -12), Vector3(13, 0.02, -12),
+        Vector3(-13, 0.02, 11), Vector3(13, 0.02, 11),
+    ]:
+        _add_beacon(position)
+
+    _add_wind_zone(Vector3(-7, 1.1, 2), Vector3(5, 2.2, 20), Vector3(8, 0, 0), Color("63eaff"))
+    _add_wind_zone(Vector3(8, 1.1, -2), Vector3(5, 2.2, 20), Vector3(-8, 0, 0), Color("ffd86a"))
+    _add_pulse_gate(Vector3(-7, 1.2, 7), Vector3(5.2, 2.4, 0.45), 0.0, Color("ff5f87"))
+    _add_pulse_gate(Vector3(-7, 1.2, -5), Vector3(5.2, 2.4, 0.45), 1.4, Color("ffd86a"))
+    _add_pulse_gate(Vector3(8, 1.2, 4), Vector3(5.2, 2.4, 0.45), 2.6, Color("63eaff"))
+    _add_pulse_gate(Vector3(8, 1.2, -9), Vector3(5.2, 2.4, 0.45), 0.8, Color("ff5f87"))
+    _add_rotating_laser(Vector3(0, 0, 0), 9.0, 1.8)
+    _add_rotating_laser(Vector3(-10, 0, 8), 5.0, -2.2)
+    _add_rotating_laser(Vector3(10, 0, -8), 5.0, 2.5)
+    _add_moving_sentinel(Vector3(0, 0.9, 10), Vector3.RIGHT, 10.0, 2.4, 0.0)
+    _add_moving_sentinel(Vector3(0, 0.9, -10), Vector3.RIGHT, 10.0, 2.7, 1.5)
+
+    for position in [
+        Vector3(-14, 1.1, 14), Vector3(-8, 1.1, 10), Vector3(0, 1.1, 12),
+        Vector3(9, 1.1, 13), Vector3(14, 1.1, 6), Vector3(11, 1.1, 0),
+        Vector3(13, 1.1, -13), Vector3(5, 1.1, -11), Vector3(0, 1.1, -5),
+        Vector3(-6, 1.1, -12), Vector3(-14, 1.1, -7), Vector3(-11, 1.1, 1),
+    ]:
+        _add_shard(position)
+
+    _add_portal(Vector3(0.0, 1.8, -14.0))
+
+
+func _build_level_fractured_ascent() -> void:
+    level_name = "FRACTURED ASCENT"
+    level_mechanic = "Climb a broken chain of islands using moving and vanishing platforms while gravity wells bend the safest route."
+    required_shards = 12
+    required_beacons = 3
+    spawn_point = Vector3(0.0, 1.2, 14.0)
+    _apply_palette(Color("17133f"), Color("6954b7"), Color("9efcff"), Color("ff9be7"))
+
+    _add_static_platform(Vector3(0, -0.4, 14), Vector3(8, 0.8, 6), Color("41387a"), true)
+    _add_static_platform(Vector3(-9, 0.7, 8), Vector3(7, 0.8, 6), Color("51448c"), true)
+    _add_static_platform(Vector3(8, 1.5, 5), Vector3(7, 0.8, 6), Color("51448c"), true)
+    _add_static_platform(Vector3(-5, 2.4, -1), Vector3(7, 0.8, 6), Color("51448c"), true)
+    _add_static_platform(Vector3(7, 3.3, -5), Vector3(7, 0.8, 6), Color("51448c"), true)
+    _add_static_platform(Vector3(-6, 4.2, -11), Vector3(7, 0.8, 6), Color("51448c"), true)
+    _add_static_platform(Vector3(5, 5.1, -15), Vector3(9, 0.8, 7), Color("41387a"), true)
+
+    _add_moving_platform(Vector3(-4.5, 0.2, 11), Vector3(3.8, 0.55, 3.8), Vector3.RIGHT, 2.0, 1.25, 0.0)
+    _add_moving_platform(Vector3(3.5, 1.1, 7), Vector3(3.8, 0.55, 3.8), Vector3.FORWARD, 2.0, 1.4, 1.3)
+    _add_moving_platform(Vector3(1, 3.0, -3), Vector3(3.8, 0.55, 3.8), Vector3.RIGHT, 2.5, 1.55, 2.4)
+    _add_vanishing_platform(Vector3(-1, 1.8, 3), 0.0)
+    _add_vanishing_platform(Vector3(2, 3.8, -8), 1.4)
+    _add_vanishing_platform(Vector3(-1, 4.6, -13), 2.8)
+    _add_gravity_well(Vector3(-4, 3.2, 10), 7.5, 10.0, Color("8df8ff"))
+    _add_gravity_well(Vector3(2, 5.0, -4), 8.0, 11.0, Color("ff9be7"))
+    _add_gravity_well(Vector3(0, 6.5, -13), 7.0, 9.0, Color("d6a1ff"))
+
+    _add_jump_pad(Vector3(0, 0.06, 12), 11.8, 5.0)
+    _add_jump_pad(Vector3(-9, 1.16, 6.5), 12.4, 5.2)
+    _add_jump_pad(Vector3(7, 3.76, -6.2), 12.5, 5.0)
+    _add_beacon(Vector3(-9, 1.12, 8))
+    _add_beacon(Vector3(8, 1.92, 5))
+    _add_beacon(Vector3(-6, 4.62, -11))
+
+    for position in [
+        Vector3(-2, 1.1, 14), Vector3(2, 1.1, 14),
+        Vector3(-10, 2.2, 9), Vector3(-8, 2.2, 6.5),
+        Vector3(7, 3.0, 6.5), Vector3(9, 3.0, 3.5),
+        Vector3(-6, 3.9, 0), Vector3(-4, 3.9, -2.5),
+        Vector3(6, 4.8, -4), Vector3(8, 4.8, -7),
+        Vector3(-6, 5.7, -12), Vector3(5, 6.6, -15),
+    ]:
+        _add_shard(position)
+
+    _add_moving_sentinel(Vector3(-5, 3.35, -1), Vector3.RIGHT, 2.2, 2.6, 0.4)
+    _add_moving_sentinel(Vector3(5, 6.05, -15), Vector3.FORWARD, 2.4, 2.9, 1.7)
+    _add_portal(Vector3(5.0, 7.3, -16.0))
+
+
+func _build_level_chromatic_tempest() -> void:
+    level_name = "CHROMATIC TEMPEST"
+    level_mechanic = "A dense survival arena mixing current lanes, alternating gates, fast sentinels, and four rotating laser fields."
+    required_shards = 14
+    required_beacons = 4
+    time_limit = 145.0
+    spawn_point = Vector3(0.0, 1.1, 15.0)
+    _apply_palette(Color("30142f"), Color("bd5f68"), Color("ffe68a"), Color("78efff"))
+
+    _add_static_platform(Vector3(0, -0.5, 0), Vector3(36, 1, 36), Color("66304f"), false)
+    _add_edge_rails(18.0, 18.0, 0.0)
+    _add_pylons(17.0, 0.0, Color("ffe68a"))
+
+    for position in [
+        Vector3(-14, 0.02, -14), Vector3(14, 0.02, -14),
+        Vector3(-14, 0.02, 13), Vector3(14, 0.02, 13),
+    ]:
+        _add_beacon(position)
+
+    _add_wind_zone(Vector3(-10, 1.1, 2), Vector3(4.5, 2.2, 24), Vector3(0, 0, -8), Color("78efff"))
+    _add_wind_zone(Vector3(0, 1.1, -2), Vector3(4.5, 2.2, 24), Vector3(7, 0, 0), Color("ffe68a"))
+    _add_wind_zone(Vector3(10, 1.1, 2), Vector3(4.5, 2.2, 24), Vector3(0, 0, 8), Color("ff76bd"))
+    for gate_data in [
+        [Vector3(-10, 1.2, 8), 0.0], [Vector3(-10, 1.2, -6), 1.1],
+        [Vector3(0, 1.2, 5), 2.2], [Vector3(0, 1.2, -9), 3.1],
+        [Vector3(10, 1.2, 8), 0.7], [Vector3(10, 1.2, -6), 1.8],
+    ]:
+        _add_pulse_gate(gate_data[0], Vector3(4.8, 2.4, 0.45), gate_data[1], Color("ff668f"))
+    _add_rotating_laser(Vector3(-7, 0, 7), 5.5, 2.7)
+    _add_rotating_laser(Vector3(7, 0, 7), 5.5, -2.9)
+    _add_rotating_laser(Vector3(-7, 0, -7), 5.5, -3.1)
+    _add_rotating_laser(Vector3(7, 0, -7), 5.5, 3.3)
+    _add_moving_sentinel(Vector3(0, 0.9, 13), Vector3.RIGHT, 12.0, 3.0, 0.0)
+    _add_moving_sentinel(Vector3(0, 0.9, 0), Vector3.RIGHT, 13.0, 3.3, 1.1)
+    _add_moving_sentinel(Vector3(0, 0.9, -13), Vector3.RIGHT, 12.0, 3.6, 2.2)
+
+    for position in [
+        Vector3(-16, 1.1, 15), Vector3(-9, 1.1, 13), Vector3(0, 1.1, 14),
+        Vector3(9, 1.1, 13), Vector3(16, 1.1, 9), Vector3(14, 1.1, 2),
+        Vector3(15, 1.1, -8), Vector3(9, 1.1, -14), Vector3(1, 1.1, -15),
+        Vector3(-7, 1.1, -14), Vector3(-15, 1.1, -10), Vector3(-14, 1.1, -2),
+        Vector3(-12, 1.1, 7), Vector3(2, 1.1, 1),
+    ]:
+        _add_shard(position)
+
+    _add_portal(Vector3(0.0, 1.8, -16.0))
+
+
+func _build_level_aurora_apex() -> void:
+    level_name = "AURORA APEX"
+    level_mechanic = "The final convergence combines gravity wells, disappearing platforms, pulse gates, currents, lasers, and low gravity."
+    required_shards = 15
+    required_beacons = 4
+    time_limit = 170.0
+    spawn_point = Vector3(0.0, 1.1, 16.0)
+    _apply_palette(Color("132e46"), Color("398eb0"), Color("a0fff0"), Color("ffd980"))
+
+    _add_static_platform(Vector3(0, -0.5, 0), Vector3(38, 1, 38), Color("205b78"), false)
+    _add_edge_rails(19.0, 19.0, 0.0)
+    _add_pylons(18.0, 0.0, Color("a0fff0"))
+    _add_static_platform(Vector3(-12, 2.3, -10), Vector3(7, 0.8, 7), Color("39758f"), true)
+    _add_static_platform(Vector3(12, 2.3, -10), Vector3(7, 0.8, 7), Color("39758f"), true)
+    _add_static_platform(Vector3(-12, 2.3, 9), Vector3(7, 0.8, 7), Color("39758f"), true)
+    _add_static_platform(Vector3(12, 2.3, 9), Vector3(7, 0.8, 7), Color("39758f"), true)
+
+    _add_beacon(Vector3(-12, 2.72, -10))
+    _add_beacon(Vector3(12, 2.72, -10))
+    _add_beacon(Vector3(-12, 2.72, 9))
+    _add_beacon(Vector3(12, 2.72, 9))
+    _add_gravity_well(Vector3(-8, 4.0, 0), 9.0, 11.0, Color("87f8ff"))
+    _add_gravity_well(Vector3(8, 4.0, 0), 9.0, 11.0, Color("ffd980"))
+    _add_wind_zone(Vector3(0, 1.1, 9), Vector3(22, 2.2, 4.5), Vector3(8, 0, 0), Color("87f8ff"))
+    _add_wind_zone(Vector3(0, 1.1, -9), Vector3(22, 2.2, 4.5), Vector3(-8, 0, 0), Color("ffd980"))
+    _add_pulse_gate(Vector3(-6, 1.2, 4), Vector3(0.45, 2.4, 8.0), 0.0, Color("ff668f"))
+    _add_pulse_gate(Vector3(6, 1.2, 4), Vector3(0.45, 2.4, 8.0), 1.4, Color("ffd980"))
+    _add_pulse_gate(Vector3(-6, 1.2, -5), Vector3(0.45, 2.4, 8.0), 2.8, Color("87f8ff"))
+    _add_pulse_gate(Vector3(6, 1.2, -5), Vector3(0.45, 2.4, 8.0), 0.7, Color("ff668f"))
+    _add_vanishing_platform(Vector3(-5, 1.2, 13), 0.0)
+    _add_vanishing_platform(Vector3(5, 1.2, 13), 1.5)
+    _add_vanishing_platform(Vector3(-5, 1.2, -13), 2.8)
+    _add_vanishing_platform(Vector3(5, 1.2, -13), 0.8)
+    _add_moving_platform(Vector3(-12, 1.0, 0), Vector3(4.0, 0.55, 4.0), Vector3.FORWARD, 4.0, 1.5, 0.0)
+    _add_moving_platform(Vector3(12, 1.0, 0), Vector3(4.0, 0.55, 4.0), Vector3.FORWARD, 4.0, 1.7, 1.5)
+    _add_jump_pad(Vector3(0, 0.06, 14), 12.5, 6.0)
+    _add_jump_pad(Vector3(-12, 0.06, 4), 13.0, 5.0)
+    _add_jump_pad(Vector3(12, 0.06, -4), 13.0, 5.0)
+    _add_rotating_laser(Vector3(0, 0, 0), 10.0, 2.4)
+    _add_rotating_laser(Vector3(-12, 2.7, -10), 5.5, -3.0)
+    _add_rotating_laser(Vector3(12, 2.7, 9), 5.5, 3.2)
+    _add_moving_sentinel(Vector3(0, 0.9, 12), Vector3.RIGHT, 14.0, 3.1, 0.0)
+    _add_moving_sentinel(Vector3(0, 0.9, -12), Vector3.RIGHT, 14.0, 3.5, 1.8)
+
+    for position in [
+        Vector3(-16, 1.1, 16), Vector3(-8, 1.1, 14), Vector3(0, 1.1, 15),
+        Vector3(8, 1.1, 14), Vector3(16, 1.1, 13), Vector3(15, 1.1, 5),
+        Vector3(15, 1.1, -4), Vector3(15, 1.1, -14), Vector3(7, 1.1, -16),
+        Vector3(0, 1.1, -15), Vector3(-8, 1.1, -16), Vector3(-16, 1.1, -12),
+        Vector3(-15, 1.1, -3), Vector3(-15, 1.1, 7), Vector3(0, 1.1, 3),
+    ]:
+        _add_shard(position)
+
+    _add_portal(Vector3(0.0, 1.8, -17.0))
+
+
 func _apply_palette(background: Color, horizon: Color, accent: Color, secondary: Color) -> void:
-    sky_material.sky_top_color = background
-    sky_material.sky_horizon_color = horizon
-    sky_material.sky_curve = 0.12
-    sky_material.ground_bottom_color = background.darkened(0.35)
-    sky_material.ground_horizon_color = horizon.darkened(0.42)
-    sky_material.ground_curve = 0.18
-    sun.light_color = Color(background).lerp(Color.WHITE, 0.72)
-    accent_light.light_color = accent
-    environment.fog_light_color = horizon
+    # Keep the space mood while lifting the playable silhouettes well above
+    # black. This is cheaper and more consistent than restoring mobile shadows.
+    var bright_top := background.lightened(0.18)
+    var bright_horizon := horizon.lightened(0.24)
+    sky_material.sky_top_color = bright_top
+    sky_material.sky_horizon_color = bright_horizon
+    sky_material.sky_curve = 0.16
+    sky_material.ground_bottom_color = background.lightened(0.06)
+    sky_material.ground_horizon_color = horizon.darkened(0.08)
+    sky_material.ground_curve = 0.22
+    sun.light_color = accent.lerp(Color.WHITE, 0.68)
+    accent_light.light_color = accent.lightened(0.16)
+    environment.ambient_light_color = secondary.lightened(0.56)
+    environment.fog_light_color = bright_horizon
     _rebuild_cosmos(accent, secondary)
 
 
@@ -511,7 +733,7 @@ func _rebuild_cosmos(accent: Color, secondary: Color) -> void:
     planet.mesh = planet_mesh
     planet.position = Vector3(-24.0 + current_level * 7.0, 19.0, -34.0)
     planet.scale = Vector3.ONE * (4.2 + fmod(float(current_level), 3.0))
-    planet.material_override = _make_material(secondary.darkened(0.38), 0.8, false, true)
+    planet.material_override = _make_material(secondary.darkened(0.08), 1.45, false, true)
     planet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     cosmos_root.add_child(planet)
 
@@ -524,14 +746,14 @@ func _rebuild_cosmos(accent: Color, secondary: Color) -> void:
             var wave := sin(ratio * 8.0 + ribbon_index * 2.2) * (1.5 + ribbon_index * 0.5)
             var z := -27.0 + ribbon_index * 11.0
             var y := 13.0 + ribbon_index * 4.0 + wave
-            mesh.surface_set_color(Color(accent if ribbon_index == 0 else secondary, 0.18))
+            mesh.surface_set_color(Color(accent if ribbon_index == 0 else secondary, 0.27))
             mesh.surface_add_vertex(Vector3(x, y - 0.8, z))
-            mesh.surface_set_color(Color(secondary if ribbon_index == 0 else accent, 0.025))
+            mesh.surface_set_color(Color(secondary if ribbon_index == 0 else accent, 0.055))
             mesh.surface_add_vertex(Vector3(x, y + 0.8, z))
         mesh.surface_end()
         var ribbon := MeshInstance3D.new()
         ribbon.mesh = mesh
-        ribbon.material_override = _make_material(Color(accent, 0.18), 1.3, true, true)
+        ribbon.material_override = _make_material(Color(accent, 0.26), 1.8, true, true)
         ribbon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
         cosmos_root.add_child(ribbon)
 
@@ -971,7 +1193,7 @@ func _complete_level() -> void:
     else:
         overlay_mode = "campaign"
         overlay_title.text = "AURORA RESTORED"
-        overlay_body.text = "All six sectors stabilized.\nCampaign time: %s\nRecoveries: %d" % [_format_time(campaign_elapsed), deaths]
+        overlay_body.text = "All ten sectors stabilized.\nCampaign time: %s\nRecoveries: %d" % [_format_time(campaign_elapsed), deaths]
         overlay_button.text = "PLAY AGAIN"
     overlay_panel.visible = true
 
@@ -980,6 +1202,8 @@ func _next_level_name() -> String:
     var names := [
         "AURORA GARDEN", "SHIFTING ISLES", "POLARITY REACTOR",
         "EVENT HORIZON", "GRAVITY ARCHIPELAGO", "NOVA CIRCUIT",
+        "RADIANT RELAY", "FRACTURED ASCENT", "CHROMATIC TEMPEST",
+        "AURORA APEX",
     ]
     return names[mini(current_level + 1, names.size() - 1)]
 
@@ -1206,12 +1430,14 @@ func _get_cached_material(color: Color, emission: float, transparent: bool) -> S
 
 func _make_material(color: Color, emission: float = 0.0, transparent: bool = false, unshaded: bool = false) -> StandardMaterial3D:
     var material := StandardMaterial3D.new()
-    material.albedo_color = color
-    material.metallic = 0.38
-    material.roughness = 0.28
+    var lifted_color := color.lightened(0.12 if not transparent else 0.06)
+    lifted_color.a = color.a
+    material.albedo_color = lifted_color
+    material.metallic = 0.3
+    material.roughness = 0.34
     if emission > 0.0:
         material.emission_enabled = true
-        material.emission = Color(color.r, color.g, color.b, 1.0)
+        material.emission = Color(color.r, color.g, color.b, 1.0).lightened(0.08)
         material.emission_energy_multiplier = emission
     if transparent or color.a < 1.0:
         material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA

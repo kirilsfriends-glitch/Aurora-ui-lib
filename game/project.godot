@@ -1,10 +1,10 @@
 ; Aurora Drift 3D — Godot 4.3
-; A six-level Blender-powered 3D campaign for Android.
+; A ten-level Blender-powered 3D campaign for Android.
 config_version=5
 
 [application]
 config/name="Aurora Drift 3D"
-config/description="Pilot an aurora drone through six evolving neon sectors."
+config/description="Pilot an aurora drone through ten increasingly difficult neon sectors."
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 boot_splash/bg_color=Color(0.015, 0.025, 0.09, 1)

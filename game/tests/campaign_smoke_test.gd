@@ -16,7 +16,7 @@ func _run_campaign_smoke_test() -> void:
     root.add_child(game)
     await process_frame
 
-    for level_index in range(6):
+    for level_index in range(10):
         game._load_level(level_index)
         await process_frame
         if game.current_level != level_index or game.level_root == null or game.portal == null:
@@ -27,5 +27,5 @@ func _run_campaign_smoke_test() -> void:
 
     game.queue_free()
     await process_frame
-    print("CAMPAIGN_SMOKE_OK:6")
+    print("CAMPAIGN_SMOKE_OK:10")
     quit(0)
