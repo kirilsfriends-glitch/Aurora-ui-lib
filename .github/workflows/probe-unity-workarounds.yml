@@ -98,6 +98,7 @@ jobs:
     outputs:
       usable: ${{ steps.classify.outputs.usable }}
       activation_material: ${{ steps.activation.outputs.available }}
+      builder_activation: ${{ steps.activation.outputs.builder_available }}
     env:
       UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
       UNITY_EMAIL: ${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}
@@ -124,11 +125,22 @@ jobs:
         shell: bash
         run: |
           ROUTES=()
-          [[ -n "$UNITY_LICENSE" ]] && ROUTES+=(license-file)
-          [[ -n "$UNITY_SERIAL" ]] && ROUTES+=(serial-or-named-seat)
-          [[ -n "$UNITY_LICENSING_SERVER" ]] && ROUTES+=(floating-server)
+          BUILDER_ROUTES=()
+          if [[ -n "$UNITY_LICENSE" ]]; then
+            ROUTES+=(license-file)
+            BUILDER_ROUTES+=(license-file)
+          fi
+          if [[ -n "$UNITY_SERIAL" ]]; then
+            ROUTES+=(serial-or-named-seat)
+            BUILDER_ROUTES+=(serial-or-named-seat)
+          fi
+          if [[ -n "$UNITY_LICENSING_SERVER" ]]; then
+            ROUTES+=(floating-server)
+            BUILDER_ROUTES+=(floating-server)
+          fi
           if [[ -n "$UNITY_EMAIL" && -n "$UNITY_PASSWORD" ]]; then
             ROUTES+=(personal-account)
+            BUILDER_ROUTES+=(personal-account)
           fi
           if [[ -n "$UNITY_SERVICE_ACCOUNT_ID" && -n "$UNITY_SERVICE_ACCOUNT_SECRET" ]]; then
             ROUTES+=(cloud-service-account)
@@ -143,8 +155,17 @@ jobs:
             echo "No Unity license, account, licensing-server, or service-account route is configured." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          if (( ${#BUILDER_ROUTES[@]} > 0 )); then
+            echo "builder_available=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Unity activation probe::A non-interactive Editor activation route is configured (${#BUILDER_ROUTES[@]} route(s)); attempting the APK build."
+          else
+            echo "builder_available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Unity activation probe::No license file, serial, licensing server, or Personal account credentials are configured for the Editor."
+          fi
+
       - name: Attempt modern GameCI personal/paid activation and Android build
         id: unity_build
+        if: steps.activation.outputs.builder_available == 'true'
         continue-on-error: true
         uses: game-ci/unity-builder@v6
         env:
