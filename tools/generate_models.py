@@ -162,11 +162,16 @@ def export_model(filename, objects):
             material_lookup[material_name] = len(unique_materials)
             unique_materials.append(slot.material)
         slot_remap[slot_index] = material_lookup[material_name]
-    for polygon in merged.data.polygons:
-        polygon.material_index = slot_remap[polygon.material_index]
+    polygon_material_indices = [
+        slot_remap[polygon.material_index] for polygon in merged.data.polygons
+    ]
     merged.data.materials.clear()
     for material_item in unique_materials:
         merged.data.materials.append(material_item)
+    # Clearing slots resets every polygon to slot 0, so restore the compacted
+    # indices only after the final slot list exists.
+    for polygon, material_index in zip(merged.data.polygons, polygon_material_indices):
+        polygon.material_index = material_index
 
     path = OUT / filename
     bpy.ops.export_scene.gltf(
