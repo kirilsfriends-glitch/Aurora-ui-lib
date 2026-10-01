@@ -1,6 +1,6 @@
 # Aurora Strike vertical slice — Godot project
 
-This is the focused 0.2 quality rebuild of Aurora Strike for Godot 4.3 GL Compatibility rendering.
+This is the focused 0.3 source-build alpha of Aurora Strike for Godot 4.7.2 GL Compatibility rendering.
 
 ## Current playable content
 
