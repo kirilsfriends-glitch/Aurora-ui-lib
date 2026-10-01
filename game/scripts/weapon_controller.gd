@@ -88,7 +88,7 @@ func _fire_ray(origin: Vector3, direction: Vector3, ads: bool, pellet: int) -> v
                     var damage := float(config["damage"])
                     var distance := origin.distance_to(hit_position)
                     if distance > float(config["range"]) * 0.62: damage *= 0.82
-                    var head_height := collider.global_position.y + 1.18
+                    var head_height: float = collider.global_position.y + 1.18
                     var headshot := hit_position.y > head_height
                     if headshot: damage *= 1.55
                     if is_instance_valid(game): game.register_hit(actor, collider, headshot)

@@ -198,8 +198,8 @@ func _set_move_goal(destination: Vector3) -> void:
 func _move(delta: float) -> void:
     var desired := Vector3.ZERO
     if state == State.COMBAT and is_instance_valid(target):
-        var to_target := target.global_position - global_position
-        var distance := to_target.length()
+        var to_target: Vector3 = target.global_position - global_position
+        var distance: float = to_target.length()
         if distance > _preferred_range(): desired += to_target.normalized()
         elif distance < _preferred_range() * 0.45: desired -= to_target.normalized()
         desired += global_basis.x * strafe_sign * 0.58
@@ -219,7 +219,7 @@ func _move(delta: float) -> void:
 
     for ally in game.get_living_allies(team):
         if ally == self: continue
-        var away := global_position - ally.global_position
+        var away: Vector3 = global_position - ally.global_position
         away.y = 0
         if away.length_squared() < 2.0 and away.length_squared() > 0.01:
             desired += away.normalized() * 0.55
@@ -233,7 +233,7 @@ func _move(delta: float) -> void:
     if desired.length_squared() > 0.05:
         var target_yaw := atan2(-desired.x, -desired.z)
         if state == State.COMBAT and is_instance_valid(target):
-            var aim_offset := target.global_position - global_position
+            var aim_offset: Vector3 = target.global_position - global_position
             target_yaw = atan2(-aim_offset.x, -aim_offset.z)
         rotation.y = lerp_angle(rotation.y, target_yaw, delta * 9.0)
     if is_instance_valid(visual):
@@ -243,8 +243,8 @@ func _fight(_delta: float) -> void:
     if state != State.COMBAT or not is_instance_valid(target) or reaction_timer > 0 or weapon.reloading: return
     if not target.alive or not _has_line_of_sight(target): return
     var origin := global_position + Vector3.UP * 1.34 + (-global_basis.z * 0.32)
-    var target_point := target.global_position + Vector3.UP * (1.47 if rng.randf() < skill * 0.32 else 1.08)
-    var distance := origin.distance_to(target_point)
+    var target_point: Vector3 = target.global_position + Vector3.UP * (1.47 if rng.randf() < skill * 0.32 else 1.08)
+    var distance: float = origin.distance_to(target_point)
     var inaccuracy := lerpf(0.105, 0.012, skill) * (1.0 + distance / 42.0)
     var direction := (target_point - origin).normalized()
     direction = (direction + global_basis.x * rng.randfn(0, inaccuracy) + Vector3.UP * rng.randfn(0, inaccuracy)).normalized()

@@ -109,11 +109,11 @@ func _create_touch_controls() -> void:
 
 func _on_actor_died(victim, killer) -> void:
     if not match_active: return
-    var victim_team := int(victim.team)
-    var killer_team := int(killer.team) if is_instance_valid(killer) else 1 - victim_team
+    var victim_team: int = int(victim.team)
+    var killer_team: int = int(killer.team) if is_instance_valid(killer) else 1 - victim_team
     var hit_info: Dictionary = last_hits.get(victim.get_instance_id(), {})
-    var headshot := bool(hit_info.get("headshot", false))
-    var weapon_title := "environment"
+    var headshot: bool = bool(hit_info.get("headshot", false))
+    var weapon_title: String = "environment"
     if is_instance_valid(killer) and killer.get("weapon") != null:
         weapon_title = str(killer.weapon.config.get("title", "weapon"))
     hud.add_kill(str(killer.name) if is_instance_valid(killer) else "Arena", str(victim.name), weapon_title, headshot)
@@ -150,7 +150,7 @@ func _end_elimination_round() -> void:
     if not match_active: return
     for actor in actors:
         if is_instance_valid(actor):
-            var team_members := actors.filter(func(item): return int(item.team) == int(actor.team))
+            var team_members: Array = actors.filter(func(item): return int(item.team) == int(actor.team))
             actor.respawn(_spawn_for(int(actor.team), team_members.find(actor)))
     match_time = 120.0
     round_transition = false
@@ -164,7 +164,7 @@ func _process_control(delta: float) -> void:
     var zone := get_objective_position()
     for actor in actors:
         if is_instance_valid(actor) and actor.alive:
-            var flat_distance := Vector2(actor.global_position.x - zone.x, actor.global_position.z - zone.z).length()
+            var flat_distance: float = Vector2(actor.global_position.x - zone.x, actor.global_position.z - zone.z).length()
             if flat_distance <= 5.3: counts[int(actor.team)] += 1
     if counts[0] > counts[1]:
         team_scores[0] += 1
@@ -302,7 +302,7 @@ func explode(position: Vector3, damage: float, attacker) -> void:
     tween.chain().tween_callback(blast.queue_free)
     for victim in actors:
         if not is_instance_valid(victim) or not victim.alive or not can_damage(attacker, victim): continue
-        var distance := position.distance_to(victim.global_position + Vector3.UP)
+        var distance: float = position.distance_to(victim.global_position + Vector3.UP)
         if distance > 7.0: continue
         var query := PhysicsRayQueryParameters3D.create(position + Vector3.UP * 0.3, victim.global_position + Vector3.UP, 1)
         var obstruction := get_world_3d().direct_space_state.intersect_ray(query)
