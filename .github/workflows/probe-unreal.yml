@@ -139,7 +139,9 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ steps.probe.outputs.usable }}" == "true" ]]; then
+            echo "::notice title=Unreal Engine probe result::UNREAL_AVAILABLE — stop before evaluating Unity or Godot."
             echo "Unreal is available. Unity and Godot must not be evaluated."
           else
+            echo "::warning title=Unreal Engine probe result::UNREAL_BLOCKED — no authorized editor, source, or container route. Stop and wait for the user's explicit instruction before evaluating Unity."
             echo "Unreal is unavailable. Stop here and wait for the user's explicit instruction before evaluating Unity."
           fi
