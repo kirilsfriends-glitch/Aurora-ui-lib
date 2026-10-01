@@ -45,6 +45,24 @@ func _run() -> void:
     for path in required_scripts:
         check(ResourceLoader.exists(path), "Missing gameplay system: " + path)
 
+    # Instantiate the real entry scene and deploy a complete 5v5 match. This exercises
+    # lobby/HUD construction, generated operator and weapon scenes, signal wiring,
+    # map creation, the local first-person controller, and all nine bot controllers.
+    var main_scene := load("res://main.tscn") as PackedScene
+    check(main_scene != null, "Main scene could not be loaded")
+    if main_scene != null:
+        var game = main_scene.instantiate()
+        root.add_child(game)
+        await process_frame
+        check(game.lobby != null and game.hud != null, "Lobby or HUD failed to initialize")
+        await game.start_match("dockyard", "tdm", 0.7)
+        check(game.actors.size() == 10, "Expected a complete 5v5 match")
+        check(game.local_player != null and game.local_player.alive, "First-person player failed to spawn")
+        check(game.map_runtime != null, "Runtime tactical map failed to build")
+        check(game.get_living_allies(0).size() == 5, "Alpha team did not spawn five combatants")
+        check(game.get_living_allies(1).size() == 5, "Bravo team did not spawn five combatants")
+        game.free()
+
     if failures.is_empty():
         print("AURORA STRIKE SMOKE TEST PASSED: 5 maps, 12 weapons, AI, lobby, HUD and controls loaded")
         quit(0)
