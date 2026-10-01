@@ -8,11 +8,30 @@ using UnityEngine;
 
 public static class BuildProbe
 {
+    private const string ScenePath = "Assets/EngineProbe.unity";
+    private const string OutputPath = "Build/AuroraUnityEngineProbe.apk";
+
+    // Optional Unity Build Automation hook. Set the target's Pre-Export Method to
+    // BuildProbe.PreExport if cloud-side project settings need to be repaired.
+    public static void PreExport()
+    {
+        if (!File.Exists(ScenePath))
+            throw new FileNotFoundException("The committed probe scene is missing.", ScenePath);
+
+        EditorBuildSettings.scenes = new[]
+        {
+            new EditorBuildSettingsScene(ScenePath, true)
+        };
+
+        PlayerSettings.productName = "Aurora Unity Engine Probe";
+        PlayerSettings.companyName = "Arena.ai";
+        PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "ai.arena.aurorastrike");
+        AssetDatabase.SaveAssets();
+        Debug.Log("UNITY_PROBE_PREEXPORT_READY scene=" + ScenePath);
+    }
+
     public static void BuildAndroid()
     {
-        const string scenePath = "Assets/EngineProbe.unity";
-        const string outputPath = "Build/AuroraUnityEngineProbe.apk";
-
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
         var cameraObject = new GameObject("Probe Camera");
@@ -36,12 +55,10 @@ public static class BuildProbe
         material.color = new Color(0.05f, 0.65f, 0.9f);
         cube.GetComponent<Renderer>().sharedMaterial = material;
 
-        EditorSceneManager.SaveScene(scene, scenePath);
+        EditorSceneManager.SaveScene(scene, ScenePath);
         Directory.CreateDirectory("Build");
 
-        PlayerSettings.productName = "Aurora Unity Engine Probe";
-        PlayerSettings.companyName = "Arena.ai";
-        PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "ai.arena.aurora.unityprobe");
+        PreExport();
         PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
         PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
         PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
@@ -51,8 +68,8 @@ public static class BuildProbe
 
         var options = new BuildPlayerOptions
         {
-            scenes = new[] { scenePath },
-            locationPathName = outputPath,
+            scenes = new[] { ScenePath },
+            locationPathName = OutputPath,
             target = BuildTarget.Android,
             options = BuildOptions.Development
         };
@@ -61,9 +78,9 @@ public static class BuildProbe
         if (report.summary.result != BuildResult.Succeeded)
             throw new Exception($"Unity Android probe failed: {report.summary.result}; errors={report.summary.totalErrors}");
 
-        if (!File.Exists(outputPath) || new FileInfo(outputPath).Length == 0)
+        if (!File.Exists(OutputPath) || new FileInfo(OutputPath).Length == 0)
             throw new Exception("Unity reported success but did not produce a non-empty APK.");
 
-        Debug.Log($"UNITY_ANDROID_PROBE_SUCCEEDED path={outputPath} size={report.summary.totalSize}");
+        Debug.Log($"UNITY_ANDROID_PROBE_SUCCEEDED path={OutputPath} size={report.summary.totalSize}");
     }
 }
