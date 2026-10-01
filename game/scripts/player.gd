@@ -42,12 +42,8 @@ func _ready() -> void:
     model.position.y = -0.02
     visual_root.add_child(model)
 
-    var engine_light := OmniLight3D.new()
-    engine_light.light_color = Color("4fffe0")
-    engine_light.light_energy = 2.4
-    engine_light.omni_range = 4.5
-    engine_light.position = Vector3(0.0, 0.15, 0.55)
-    visual_root.add_child(engine_light)
+    # The Blender thrusters are emissive; a per-frame OmniLight was redundant
+    # and expensive on tiled mobile GPUs.
 
 
 func _process(delta: float) -> void:

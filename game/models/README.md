@@ -12,6 +12,6 @@ Generated files:
 - `moving_platform.glb` — modular floating platform;
 - `switch_beacon.glb` — interactive level switch.
 
-The editable source is stored outside the Godot import tree at [`assets/blender/aurora_assets.blend`](../../assets/blender/aurora_assets.blend), preventing Godot from trying to invoke Blender during every project import.
+The editable source is stored outside the Godot import tree at [`assets/blender/aurora_assets.blend`](../../assets/blender/aurora_assets.blend), preventing Godot from trying to invoke Blender during every project import. Component objects remain separate in the `.blend`; temporary copies are joined into one mobile-optimized render mesh during each GLB export.
 
 Do not hand-edit generated `.glb` files. Update the generator and run the **Generate Blender models** workflow instead.

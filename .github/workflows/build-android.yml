@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  APK_NAME: AuroraDrift3D-v0.2.0-debug.apk
-  RELEASE_TAG: aurora-drift-3d-v0.2.0
+  APK_NAME: AuroraDrift3D-v0.3.0-debug.apk
+  RELEASE_TAG: aurora-drift-3d-v0.3.0
 
 jobs:
   build-android:
@@ -43,6 +43,7 @@ jobs:
               echo "Godot: $(godot --version)"
               echo "Android SDK: $ANDROID_HOME"
               godot --headless --editor --quit
+              godot --headless --path . --script res://tests/campaign_smoke_test.gd
               godot --headless --verbose \
                 --export-debug "Android" \
                 "/workspace/build/android/${{ env.APK_NAME }}"
@@ -97,13 +98,15 @@ jobs:
           APK="build/android/$APK_NAME"
           CHECKSUM="$APK.sha256"
           NOTES=$(cat <<'EOF'
-          ## Aurora Drift 3D v0.2.0
+          ## Aurora Drift 3D v0.3.0
 
-          A substantially expanded offline 3D campaign made with Godot 4.3 and original Blender 4.3 assets.
+          A smoother six-level offline 3D campaign made with Godot 4.3 and original Blender 4.3 assets.
 
-          **Four evolving levels:** master patrol sentinels, moving islands and launch pads, polarity beacons and wind tunnels, then survive a timed low-gravity finale with disappearing platforms.
+          **Two new sectors:** bend jumps around gravity wells in Gravity Archipelago, then dodge synchronized pulse gates and acceleration lanes in the timed Nova Circuit finale.
 
-          **Camera controls:** drag the right side of the screen or use **CAM ◀ / CAM ▶**. Desktop players can right-drag or use `Q` / `E`. Movement is camera-relative.
+          **True multitouch controls:** use the floating analog stick, jump, and rotate the camera at the same time. Desktop movement remains camera-relative with mouse orbit and `Q` / `E` support.
+
+          **Mobile optimization:** optimized single-mesh GLB exports, billboard stars, reduced dynamic lights, shadow-free emissive lighting, shared resources, and FSR rendering substantially reduce CPU/GPU load.
 
           The APK targets arm64-v8a Android devices. It works offline, requests no sensitive permissions, and is signed with a debug key for direct sideloading and testing.
 
@@ -117,6 +120,6 @@ jobs:
             gh release create "$RELEASE_TAG" \
               "$APK" "$CHECKSUM" \
               --target "$GITHUB_SHA" \
-              --title "Aurora Drift 3D v0.2.0 (Android)" \
+              --title "Aurora Drift 3D v0.3.0 (Android)" \
               --notes "$NOTES"
           fi

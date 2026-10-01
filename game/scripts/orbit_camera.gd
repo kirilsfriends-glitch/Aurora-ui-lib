@@ -8,7 +8,7 @@ var min_distance := 7.5
 var max_distance := 17.0
 var rotate_button_axis := 0.0
 var mouse_dragging := false
-var look_sensitivity := 0.006
+var look_sensitivity := 0.005
 var follow_speed := 7.0
 
 
@@ -45,10 +45,6 @@ func _unhandled_input(event: InputEvent) -> void:
             zoom(1.0)
     elif event is InputEventMouseMotion and mouse_dragging:
         orbit(event.relative)
-    elif event is InputEventScreenDrag:
-        var width := get_viewport().get_visible_rect().size.x
-        if event.position.x > width * 0.42:
-            orbit(event.relative)
 
 
 func orbit(relative: Vector2) -> void:

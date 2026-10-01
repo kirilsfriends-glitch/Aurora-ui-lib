@@ -1,8 +1,8 @@
 # Aurora Drift 3D
 
-A four-level mobile 3D campaign built with Godot 4.3 and original Blender 4.3 assets.
+A six-level mobile 3D campaign built with Godot 4.3 and original Blender 4.3 assets.
 
-Current Android release: **v0.2.0**.
+Current Android release: **v0.3.0**.
 
 ## Campaign
 
@@ -14,15 +14,18 @@ Collect the required aurora shards, complete each sector's secondary objective, 
 | Shifting Isles | Moving platforms, launch pads, void traversal |
 | Polarity Reactor | Beacons, wind zones, rotating lasers |
 | Event Horizon | Low gravity, disappearing platforms, countdown |
+| Gravity Archipelago | Gravity wells, curved jumps, elevated islands |
+| Nova Circuit | Pulse gates, acceleration lanes, relay finale |
 
 ## Controls
 
 ### Android / touch
 
-- on-screen direction pad — move relative to the camera;
-- **JUMP** — jump or launch from a pad;
-- drag on the right side of the screen — orbit the camera;
-- **CAM ◀ / CAM ▶** — rotate the camera without dragging.
+- place a finger anywhere in the lower-left movement zone to create a floating analog stick;
+- move the stick with that finger for camera-relative movement;
+- tap **JUMP** with a second finger while continuing to move;
+- drag anywhere outside the movement and jump zones with another finger to orbit the camera;
+- movement, jump, and camera fingers are tracked independently, so all three actions work simultaneously.
 
 ### Desktop
 
@@ -32,6 +35,18 @@ Collect the required aurora shards, complete each sector's secondary objective, 
 - right- or middle-mouse drag — orbit the camera;
 - mouse wheel — zoom;
 - `R` — restart the current level.
+
+## Mobile optimization
+
+Version 0.3.0 reduces both GPU and main-thread load:
+
+- stars use one low-poly billboard `MultiMesh` instead of 90 UV spheres;
+- real-time directional shadows and redundant decorative lights are disabled;
+- repeated box meshes and materials share cached resources;
+- Blender keeps editable component objects but exports one optimized render mesh per GLB;
+- transparent effects and distant planets use deliberately low segment counts;
+- 3D content renders at 82% scale and is reconstructed with FSR 1.0 while the HUD remains native-resolution;
+- Android CI instantiates all six levels before export to catch campaign regressions.
 
 ## Blender assets
 
@@ -47,6 +62,7 @@ For a headless project validation:
 
 ```bash
 godot --headless --path game --editor --quit
+godot --headless --path game --script res://tests/campaign_smoke_test.gd
 ```
 
 ## Android build
@@ -54,7 +70,7 @@ godot --headless --path game --editor --quit
 The GitHub Actions workflow uses `barichello/godot-ci:4.3` with matching Godot 4.3 export templates, JDK, Android SDK, and debug keystore:
 
 ```bash
-godot --headless --export-debug "Android" ../build/android/AuroraDrift3D-v0.2.0-debug.apk
+godot --headless --export-debug "Android" ../build/android/AuroraDrift3D-v0.3.0-debug.apk
 ```
 
 The resulting arm64 APK is signed for sideload testing and published as a GitHub Release asset together with its SHA-256 checksum.

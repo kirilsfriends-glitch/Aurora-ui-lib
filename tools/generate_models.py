@@ -122,12 +122,52 @@ def move_to_collection(objects, collection):
 
 
 def export_model(filename, objects):
+    """Export one optimized render mesh while retaining editable source objects.
+
+    Godot previously imported every decorative Blender part as an individual
+    MeshInstance3D. Repeated shards and platforms therefore multiplied scene
+    traversal and draw setup costs on Android. Temporary copies are joined for
+    GLB export; the original component objects remain intact in the .blend.
+    """
     bpy.ops.object.select_all(action="DESELECT")
-    for obj in objects:
-        obj.hide_set(False)
-        obj.hide_render = False
-        obj.select_set(True)
-    bpy.context.view_layer.objects.active = objects[0]
+    export_copies = []
+    for source in objects:
+        duplicate = source.copy()
+        duplicate.data = source.data.copy()
+        bpy.context.scene.collection.objects.link(duplicate)
+        duplicate.hide_set(False)
+        duplicate.hide_render = False
+        duplicate.select_set(True)
+        bpy.context.view_layer.objects.active = duplicate
+        for modifier in list(duplicate.modifiers):
+            bpy.ops.object.modifier_apply(modifier=modifier.name)
+        export_copies.append(duplicate)
+        duplicate.select_set(False)
+
+    for duplicate in export_copies:
+        duplicate.select_set(True)
+    bpy.context.view_layer.objects.active = export_copies[0]
+    bpy.ops.object.join()
+    merged = bpy.context.object
+    merged.name = f"{Path(filename).stem}_MobileMesh"
+
+    # Joining can retain duplicate slots that point to the same material.
+    # Collapse them so glTF creates one surface per actual material.
+    unique_materials = []
+    material_lookup = {}
+    slot_remap = {}
+    for slot_index, slot in enumerate(merged.material_slots):
+        material_name = slot.material.name_full
+        if material_name not in material_lookup:
+            material_lookup[material_name] = len(unique_materials)
+            unique_materials.append(slot.material)
+        slot_remap[slot_index] = material_lookup[material_name]
+    for polygon in merged.data.polygons:
+        polygon.material_index = slot_remap[polygon.material_index]
+    merged.data.materials.clear()
+    for material_item in unique_materials:
+        merged.data.materials.append(material_item)
+
     path = OUT / filename
     bpy.ops.export_scene.gltf(
         filepath=str(path),
@@ -137,7 +177,9 @@ def export_model(filename, objects):
         export_yup=True,
         export_materials="EXPORT",
     )
-    print(f"Exported {path.name}: {path.stat().st_size} bytes, {len(objects)} objects")
+    print(f"Exported {path.name}: {path.stat().st_size} bytes, 1 optimized mesh from {len(objects)} source objects")
+
+    bpy.ops.object.delete(use_global=False)
 
 
 def build_drone(mats):

@@ -2,6 +2,7 @@ extends Node3D
 
 const PLAYER_CONTROLLER := preload("res://scripts/player.gd")
 const ORBIT_CAMERA := preload("res://scripts/orbit_camera.gd")
+const TOUCH_CONTROLS := preload("res://scripts/touch_controls.gd")
 const SHARD_MODEL := preload("res://models/aurora_shard.glb")
 const SENTINEL_MODEL := preload("res://models/energy_sentinel.glb")
 const PORTAL_MODEL := preload("res://models/exit_portal.glb")
@@ -9,7 +10,7 @@ const JUMP_PAD_MODEL := preload("res://models/jump_pad.glb")
 const PLATFORM_MODEL := preload("res://models/moving_platform.glb")
 const BEACON_MODEL := preload("res://models/switch_beacon.glb")
 
-const LEVEL_COUNT := 4
+const LEVEL_COUNT := 6
 
 var player: CharacterBody3D
 var orbit_camera: Camera3D
@@ -43,6 +44,8 @@ var moving_platforms: Array[AnimatableBody3D] = []
 var rotating_lasers: Array[Node3D] = []
 var vanishing_platforms: Array[StaticBody3D] = []
 var wind_zones: Array[Dictionary] = []
+var gravity_wells: Array[Dictionary] = []
+var pulse_gates: Array[Area3D] = []
 var portal: Area3D
 var portal_aura: MeshInstance3D
 var portal_light: OmniLight3D
@@ -57,8 +60,10 @@ var overlay_title: Label
 var overlay_body: Label
 var overlay_button: Button
 var overlay_mode := "intro"
+var touch_controls: Control
 
-var touch_state := {"left": false, "right": false, "forward": false, "back": false}
+var unit_box_mesh: BoxMesh
+var material_cache: Dictionary = {}
 
 
 func _ready() -> void:
@@ -92,7 +97,9 @@ func _process(delta: float) -> void:
 func _physics_process(delta: float) -> void:
     _move_dynamic_obstacles()
     _update_vanishing_platforms()
+    _update_pulse_gates()
     _apply_wind(delta)
+    _apply_gravity_wells(delta)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -131,27 +138,34 @@ func _build_environment() -> void:
     environment.sky = sky
     environment.background_mode = Environment.BG_SKY
     environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-    environment.ambient_light_energy = 0.72
+    environment.ambient_light_energy = 0.82
     environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
     environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-    environment.fog_enabled = true
-    environment.fog_density = 0.008
-    environment.fog_sky_affect = 0.35
+    # Mobile-friendly clear-space sky: depth comes from gradients and nebula cards,
+    # not full-screen fog or volumetrics.
+    environment.fog_enabled = false
+    sky_material.sun_angle_max = 7.0
+    sky_material.sun_curve = 0.08
+    sky_material.sun_energy_multiplier = 2.2
     world_environment.environment = environment
     add_child(world_environment)
 
     sun = DirectionalLight3D.new()
     sun.rotation_degrees = Vector3(-52.0, -38.0, 0.0)
-    sun.light_energy = 1.4
-    sun.shadow_enabled = true
-    sun.directional_shadow_max_distance = 45.0
+    sun.light_energy = 1.25
+    # Real-time directional shadows were the largest GPU cost on Android.
+    # The baked-looking emissive trims keep silhouettes readable without them.
+    sun.shadow_enabled = false
     add_child(sun)
 
     accent_light = OmniLight3D.new()
     accent_light.position = Vector3(0.0, 10.0, 0.0)
-    accent_light.omni_range = 38.0
-    accent_light.light_energy = 4.5
+    accent_light.omni_range = 20.0
+    accent_light.light_energy = 1.8
     add_child(accent_light)
+
+    unit_box_mesh = BoxMesh.new()
+    unit_box_mesh.size = Vector3.ONE
 
     cosmos_root = Node3D.new()
     cosmos_root.name = "CosmosBackdrop"
@@ -185,6 +199,8 @@ func _load_level(index: int) -> void:
     rotating_lasers.clear()
     vanishing_platforms.clear()
     wind_zones.clear()
+    gravity_wells.clear()
+    pulse_gates.clear()
     portal = null
     portal_aura = null
     portal_light = null
@@ -205,13 +221,24 @@ func _load_level(index: int) -> void:
             _build_level_polarity_reactor()
         3:
             _build_level_event_horizon()
+        4:
+            _build_level_gravity_archipelago()
+        5:
+            _build_level_nova_circuit()
 
-    player.set_gravity_multiplier(0.55 if current_level == 3 else 1.0)
+    var gravity_scale := 1.0
+    if current_level == 3:
+        gravity_scale = 0.55
+    elif current_level == 4:
+        gravity_scale = 0.76
+    elif current_level == 5:
+        gravity_scale = 0.68
+    player.set_gravity_multiplier(gravity_scale)
     player.reset_to(spawn_point)
     player.set_controls_enabled(false)
+    touch_controls.set_controls_enabled(false)
     orbit_camera.reset_view(0.0, 36.0, 12.5)
     orbit_camera.set_target(player, true)
-    _sync_touch_input()
     _update_portal_state()
     _show_level_intro()
     _update_hud()
@@ -352,11 +379,95 @@ func _build_level_event_horizon() -> void:
     _add_portal(Vector3(7.0, 5.2, -10.0))
 
 
+func _build_level_gravity_archipelago() -> void:
+    level_name = "GRAVITY ARCHIPELAGO"
+    level_mechanic = "Gravity wells bend every jump. Use their pull to arc between islands and synchronize two stellar beacons."
+    required_shards = 10
+    required_beacons = 2
+    spawn_point = Vector3(0.0, 1.2, 13.0)
+    _apply_palette(Color("031226"), Color("17617a"), Color("62ffe6"), Color("ffc45c"))
+
+    _add_static_platform(Vector3(0, -0.4, 13), Vector3(8, 0.8, 6), Color("123b56"), true)
+    _add_static_platform(Vector3(-9, 0.5, 7), Vector3(7, 0.8, 6), Color("174b63"), true)
+    _add_static_platform(Vector3(0, 1.3, 2), Vector3(8, 0.8, 7), Color("174b63"), true)
+    _add_static_platform(Vector3(10, 2.0, -3), Vector3(7, 0.8, 6), Color("174b63"), true)
+    _add_static_platform(Vector3(-8, 2.7, -8), Vector3(7, 0.8, 6), Color("174b63"), true)
+    _add_static_platform(Vector3(4, 3.5, -14), Vector3(9, 0.8, 7), Color("123b56"), true)
+
+    _add_moving_platform(Vector3(-4.8, 0.1, 10), Vector3(3.8, 0.55, 3.8), Vector3.FORWARD, 2.0, 1.05, 0.2)
+    _add_moving_platform(Vector3(5.0, 1.65, -0.5), Vector3(3.8, 0.55, 3.8), Vector3.RIGHT, 2.2, 1.2, 1.5)
+    _add_moving_platform(Vector3(-2.0, 2.8, -10.5), Vector3(3.8, 0.55, 3.8), Vector3.RIGHT, 2.4, 1.35, 2.8)
+
+    _add_gravity_well(Vector3(-4.5, 3.0, 8.5), 7.0, 11.0, Color("55f4ff"))
+    _add_gravity_well(Vector3(5.0, 3.8, -1.0), 7.5, 12.0, Color("ffc45c"))
+    _add_gravity_well(Vector3(-1.5, 4.5, -10.5), 7.0, 10.0, Color("a878ff"))
+
+    _add_jump_pad(Vector3(0, 0.06, 11.0), 11.5, 4.5)
+    _add_jump_pad(Vector3(-9, 0.96, 5.2), 12.2, 5.0)
+    _add_jump_pad(Vector3(0, 1.76, 0.0), 12.0, 5.0)
+    _add_beacon(Vector3(-9, 0.92, 7))
+    _add_beacon(Vector3(10, 2.42, -3))
+
+    for position in [
+        Vector3(-2, 1.1, 13), Vector3(2, 1.1, 13),
+        Vector3(-10, 2.0, 8), Vector3(-8, 2.0, 5.5),
+        Vector3(-2, 2.8, 2), Vector3(2, 2.8, 2),
+        Vector3(9, 3.5, -1.5), Vector3(11, 3.5, -4.5),
+        Vector3(-8, 4.2, -8), Vector3(4, 5.0, -14),
+    ]:
+        _add_shard(position)
+
+    _add_moving_sentinel(Vector3(0, 2.55, 2), Vector3.RIGHT, 2.4, 2.0, 0.0)
+    _add_moving_sentinel(Vector3(4, 4.55, -14), Vector3.FORWARD, 2.2, 2.4, 1.2)
+    _add_portal(Vector3(4.0, 5.7, -15.0))
+
+
+func _build_level_nova_circuit() -> void:
+    level_name = "NOVA CIRCUIT"
+    level_mechanic = "Final sector: pulse gates switch on and off while current lanes accelerate the drone. Stabilize all three relays before the nova cycle ends."
+    required_shards = 12
+    required_beacons = 3
+    time_limit = 125.0
+    spawn_point = Vector3(0.0, 1.1, 13.0)
+    _apply_palette(Color("100407"), Color("7d321c"), Color("ffce63"), Color("52e8ff"))
+
+    _add_static_platform(Vector3(0, -0.5, 0), Vector3(32, 1, 32), Color("35162c"), false)
+    _add_edge_rails(16.0, 16.0, 0.0)
+    _add_pylons(15.0, 0.0, Color("ffce63"))
+
+    _add_wind_zone(Vector3(-9, 1.1, 5), Vector3(4, 2.2, 17), Vector3(0, 0, -7), Color("52e8ff"))
+    _add_wind_zone(Vector3(8, 1.1, -4), Vector3(4, 2.2, 17), Vector3(0, 0, 7), Color("ffba55"))
+    _add_pulse_gate(Vector3(-9, 1.2, 4), Vector3(4.3, 2.4, 0.45), 0.0, Color("ff456d"))
+    _add_pulse_gate(Vector3(-9, 1.2, -4), Vector3(4.3, 2.4, 0.45), 1.3, Color("ffce63"))
+    _add_pulse_gate(Vector3(8, 1.2, -8), Vector3(4.3, 2.4, 0.45), 2.6, Color("ff456d"))
+    _add_pulse_gate(Vector3(2, 1.2, 1), Vector3(0.45, 2.4, 7.0), 0.8, Color("52e8ff"))
+
+    _add_beacon(Vector3(-12, 0.02, -12))
+    _add_beacon(Vector3(12, 0.02, -12))
+    _add_beacon(Vector3(12, 0.02, 11))
+    _add_rotating_laser(Vector3(0, 0, -8), 7.5, 2.5)
+    _add_rotating_laser(Vector3(7, 0, 7), 5.5, -2.9)
+    _add_moving_sentinel(Vector3(-2, 0.9, 8), Vector3.RIGHT, 7.0, 2.5, 0.0)
+    _add_moving_sentinel(Vector3(5, 0.9, -2), Vector3.FORWARD, 8.0, 2.8, 1.4)
+
+    for position in [
+        Vector3(-13, 1.1, 12), Vector3(-8, 1.1, 9), Vector3(-10, 1.1, 1),
+        Vector3(-12, 1.1, -8), Vector3(-5, 1.1, -12), Vector3(0, 1.1, -12),
+        Vector3(6, 1.1, -10), Vector3(11, 1.1, -6), Vector3(9, 1.1, 1),
+        Vector3(12, 1.1, 7), Vector3(5, 1.1, 10), Vector3(0, 1.1, 4),
+    ]:
+        _add_shard(position)
+
+    _add_portal(Vector3(0.0, 1.8, -14.0))
+
+
 func _apply_palette(background: Color, horizon: Color, accent: Color, secondary: Color) -> void:
     sky_material.sky_top_color = background
     sky_material.sky_horizon_color = horizon
+    sky_material.sky_curve = 0.12
     sky_material.ground_bottom_color = background.darkened(0.35)
     sky_material.ground_horizon_color = horizon.darkened(0.42)
+    sky_material.ground_curve = 0.18
     sun.light_color = Color(background).lerp(Color.WHITE, 0.72)
     accent_light.light_color = accent
     environment.fog_light_color = horizon
@@ -367,41 +478,61 @@ func _rebuild_cosmos(accent: Color, secondary: Color) -> void:
     for child in cosmos_root.get_children():
         child.queue_free()
 
-    var star_mesh := SphereMesh.new()
-    star_mesh.radius = 0.055
-    star_mesh.height = 0.11
-    star_mesh.material = _make_material(Color("d9f7ff"), 3.0, true)
+    # The old sky rendered 90 full UV spheres (hundreds of thousands of
+    # triangles). Billboard quads create a richer star field for ~0.1% of that
+    # geometry and are handled in one MultiMesh draw.
+    var star_mesh := QuadMesh.new()
+    star_mesh.size = Vector2(0.13, 0.13)
+    var star_material := _make_material(Color("e8fbff"), 3.2, true, true)
+    star_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+    star_mesh.material = star_material
     var multimesh := MultiMesh.new()
     multimesh.transform_format = MultiMesh.TRANSFORM_3D
-    multimesh.instance_count = 90
+    multimesh.instance_count = 76
     multimesh.mesh = star_mesh
     var random := RandomNumberGenerator.new()
     random.seed = 4321 + current_level * 977
     for index in multimesh.instance_count:
-        var position := Vector3(random.randf_range(-42, 42), random.randf_range(5, 32), random.randf_range(-42, 42))
-        var scale := random.randf_range(0.5, 1.7)
+        var position := Vector3(random.randf_range(-44, 44), random.randf_range(5, 34), random.randf_range(-44, 44))
+        var scale := random.randf_range(0.55, 2.0)
         multimesh.set_instance_transform(index, Transform3D(Basis.from_scale(Vector3.ONE * scale), position))
     var stars := MultiMeshInstance3D.new()
     stars.multimesh = multimesh
+    stars.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     cosmos_root.add_child(stars)
 
-    for ribbon_index in 3:
+    # A low-poly distant planet gives every palette a recognizable new sky.
+    var planet_mesh := SphereMesh.new()
+    planet_mesh.radius = 1.0
+    planet_mesh.height = 2.0
+    planet_mesh.radial_segments = 16
+    planet_mesh.rings = 8
+    var planet := MeshInstance3D.new()
+    planet.mesh = planet_mesh
+    planet.position = Vector3(-24.0 + current_level * 7.0, 19.0, -34.0)
+    planet.scale = Vector3.ONE * (4.2 + fmod(float(current_level), 3.0))
+    planet.material_override = _make_material(secondary.darkened(0.38), 0.8, false, true)
+    planet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    cosmos_root.add_child(planet)
+
+    for ribbon_index in 2:
         var mesh := ImmediateMesh.new()
         mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
-        for point in 33:
-            var ratio := float(point) / 32.0
-            var x := lerpf(-32.0, 32.0, ratio)
-            var wave := sin(ratio * 10.0 + ribbon_index * 1.8) * (1.6 + ribbon_index * 0.4)
-            var z := -25.0 + ribbon_index * 7.0
-            var y := 13.0 + ribbon_index * 3.2 + wave
-            mesh.surface_set_color(Color(accent if ribbon_index % 2 == 0 else secondary, 0.22))
-            mesh.surface_add_vertex(Vector3(x, y - 0.75, z))
-            mesh.surface_set_color(Color(secondary if ribbon_index % 2 == 0 else accent, 0.05))
-            mesh.surface_add_vertex(Vector3(x, y + 0.75, z))
+        for point in 25:
+            var ratio := float(point) / 24.0
+            var x := lerpf(-34.0, 34.0, ratio)
+            var wave := sin(ratio * 8.0 + ribbon_index * 2.2) * (1.5 + ribbon_index * 0.5)
+            var z := -27.0 + ribbon_index * 11.0
+            var y := 13.0 + ribbon_index * 4.0 + wave
+            mesh.surface_set_color(Color(accent if ribbon_index == 0 else secondary, 0.18))
+            mesh.surface_add_vertex(Vector3(x, y - 0.8, z))
+            mesh.surface_set_color(Color(secondary if ribbon_index == 0 else accent, 0.025))
+            mesh.surface_add_vertex(Vector3(x, y + 0.8, z))
         mesh.surface_end()
         var ribbon := MeshInstance3D.new()
         ribbon.mesh = mesh
-        ribbon.material_override = _make_material(Color(accent, 0.2), 1.5, true, true)
+        ribbon.material_override = _make_material(Color(accent, 0.18), 1.3, true, true)
+        ribbon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
         cosmos_root.add_child(ribbon)
 
 
@@ -462,22 +593,26 @@ func _add_platform_trim(parent: Node3D, size: Vector3, color: Color) -> void:
 
 func _add_edge_rails(half_x: float, half_z: float, floor_y: float) -> void:
     var color := Color("54f8de")
-    _add_static_platform(Vector3(0, floor_y + 0.65, -half_z), Vector3(half_x * 2.0, 1.3, 0.28), color, false)
-    _add_static_platform(Vector3(0, floor_y + 0.65, half_z), Vector3(half_x * 2.0, 1.3, 0.28), color, false)
-    _add_static_platform(Vector3(-half_x, floor_y + 0.65, 0), Vector3(0.28, 1.3, half_z * 2.0), color, false)
-    _add_static_platform(Vector3(half_x, floor_y + 0.65, 0), Vector3(0.28, 1.3, half_z * 2.0), color, false)
+    var rails := [
+        [Vector3(0, floor_y + 0.65, -half_z), Vector3(half_x * 2.0, 1.3, 0.28)],
+        [Vector3(0, floor_y + 0.65, half_z), Vector3(half_x * 2.0, 1.3, 0.28)],
+        [Vector3(-half_x, floor_y + 0.65, 0), Vector3(0.28, 1.3, half_z * 2.0)],
+        [Vector3(half_x, floor_y + 0.65, 0), Vector3(0.28, 1.3, half_z * 2.0)],
+    ]
+    for rail in rails:
+        var body := StaticBody3D.new()
+        body.position = rail[0]
+        level_root.add_child(body)
+        _add_box_collision(body, rail[1])
+        _add_box_visual(body, rail[1], Vector3.ZERO, color.darkened(0.48), 0.35)
+        _add_box_visual(body, Vector3(rail[1].x, 0.055, rail[1].z), Vector3(0, rail[1].y * 0.5, 0), color, 2.0)
 
 
 func _add_pylons(edge: float, floor_y: float, color: Color) -> void:
     for x in [-edge, edge]:
         for z in [-edge, edge]:
-            _add_box_visual(level_root, Vector3(0.7, 3.8, 0.7), Vector3(x, floor_y + 1.9, z), color.darkened(0.3), 0.8)
-            var light := OmniLight3D.new()
-            light.position = Vector3(x, floor_y + 4.0, z)
-            light.light_color = color
-            light.light_energy = 2.0
-            light.omni_range = 7.0
-            level_root.add_child(light)
+            _add_box_visual(level_root, Vector3(0.7, 3.8, 0.7), Vector3(x, floor_y + 1.9, z), color.darkened(0.32), 0.45)
+            _add_box_visual(level_root, Vector3(0.82, 0.12, 0.82), Vector3(x, floor_y + 3.82, z), color, 2.5)
 
 
 func _add_shard(position: Vector3) -> void:
@@ -597,6 +732,36 @@ func _add_wind_zone(center: Vector3, size: Vector3, force: Vector3, color: Color
         _add_box_visual(visual, Vector3(size.x * 0.65, 0.05, 0.05), Vector3(0, 0.1 + index * 0.18, offset), Color(color, 0.55), 2.0, true)
 
 
+func _add_gravity_well(center: Vector3, radius: float, strength: float, color: Color) -> void:
+    gravity_wells.append({"center": center, "radius": radius, "strength": strength})
+    var sphere_mesh := SphereMesh.new()
+    sphere_mesh.radius = 1.0
+    sphere_mesh.height = 2.0
+    sphere_mesh.radial_segments = 12
+    sphere_mesh.rings = 6
+    var visual := MeshInstance3D.new()
+    visual.position = center
+    visual.scale = Vector3.ONE * minf(radius * 0.38, 3.0)
+    visual.mesh = sphere_mesh
+    visual.material_override = _make_material(Color(color, 0.09), 1.2, true, true)
+    visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    level_root.add_child(visual)
+
+
+func _add_pulse_gate(position: Vector3, size: Vector3, phase: float, color: Color) -> void:
+    var area := Area3D.new()
+    area.position = position
+    area.set_meta("phase", phase)
+    area.set_meta("active", true)
+    level_root.add_child(area)
+    var collision := _add_box_collision(area, size)
+    area.set_meta("collision", collision)
+    _add_box_visual(area, size, Vector3.ZERO, Color(color, 0.42), 3.0, true)
+    _add_box_visual(area, Vector3(maxf(size.x, 0.16), size.y + 0.35, maxf(size.z, 0.16)), Vector3.ZERO, Color(color, 0.12), 0.8, true)
+    area.body_entered.connect(_on_hazard_touched)
+    pulse_gates.append(area)
+
+
 func _add_portal(center: Vector3) -> void:
     portal = Area3D.new()
     portal.position = center
@@ -613,6 +778,8 @@ func _add_portal(center: Vector3) -> void:
     var aura_mesh := SphereMesh.new()
     aura_mesh.radius = 1.05
     aura_mesh.height = 2.1
+    aura_mesh.radial_segments = 16
+    aura_mesh.rings = 8
     portal_aura = MeshInstance3D.new()
     portal_aura.mesh = aura_mesh
     portal_aura.scale.z = 0.13
@@ -663,6 +830,20 @@ func _update_vanishing_platforms() -> void:
             body.visible = active
 
 
+func _update_pulse_gates() -> void:
+    if pulse_gates.is_empty():
+        return
+    var time := Time.get_ticks_msec() / 1000.0
+    for gate in pulse_gates:
+        if not is_instance_valid(gate):
+            continue
+        var active := fmod(time + float(gate.get_meta("phase")), 4.2) < 2.55
+        if active != bool(gate.get_meta("active")):
+            gate.set_meta("active", active)
+            gate.visible = active
+            gate.set_deferred("monitoring", active)
+
+
 func _apply_wind(delta: float) -> void:
     if not level_active or not is_instance_valid(player):
         return
@@ -672,6 +853,18 @@ func _apply_wind(delta: float) -> void:
         var local := player.global_position - center
         if absf(local.x) <= half.x and absf(local.y) <= half.y and absf(local.z) <= half.z:
             player.velocity += Vector3(zone["force"]) * delta
+
+
+func _apply_gravity_wells(delta: float) -> void:
+    if not level_active or not is_instance_valid(player):
+        return
+    for well in gravity_wells:
+        var offset: Vector3 = Vector3(well["center"]) - player.global_position
+        var distance := offset.length()
+        var radius := float(well["radius"])
+        if distance > 0.25 and distance < radius:
+            var influence := 1.0 - distance / radius
+            player.velocity += offset.normalized() * float(well["strength"]) * influence * delta
 
 
 func _animate_collectibles(delta: float) -> void:
@@ -769,6 +962,7 @@ func _update_portal_state() -> void:
 func _complete_level() -> void:
     level_active = false
     player.set_controls_enabled(false)
+    touch_controls.set_controls_enabled(false)
     if current_level < LEVEL_COUNT - 1:
         overlay_mode = "next"
         overlay_title.text = "LEVEL %d COMPLETE" % (current_level + 1)
@@ -777,21 +971,24 @@ func _complete_level() -> void:
     else:
         overlay_mode = "campaign"
         overlay_title.text = "AURORA RESTORED"
-        overlay_body.text = "All four sectors stabilized.\nCampaign time: %s\nRecoveries: %d" % [_format_time(campaign_elapsed), deaths]
+        overlay_body.text = "All six sectors stabilized.\nCampaign time: %s\nRecoveries: %d" % [_format_time(campaign_elapsed), deaths]
         overlay_button.text = "PLAY AGAIN"
     overlay_panel.visible = true
 
 
 func _next_level_name() -> String:
-    var names := ["SHIFTING ISLES", "POLARITY REACTOR", "EVENT HORIZON", "AURORA GARDEN"]
-    return names[(current_level + 1) % names.size()]
+    var names := [
+        "AURORA GARDEN", "SHIFTING ISLES", "POLARITY REACTOR",
+        "EVENT HORIZON", "GRAVITY ARCHIPELAGO", "NOVA CIRCUIT",
+    ]
+    return names[mini(current_level + 1, names.size() - 1)]
 
 
 func _show_level_intro() -> void:
     overlay_mode = "intro"
     overlay_title.text = "LEVEL %d — %s" % [current_level + 1, level_name]
     var extra := "\n\nTime limit: %d seconds" % int(time_limit) if time_limit > 0.0 else ""
-    overlay_body.text = level_mechanic + extra + "\n\nSwipe the right side of the screen to rotate the camera."
+    overlay_body.text = level_mechanic + extra + "\n\nMove with the floating left stick. Drag anywhere else to rotate; jump remains independent."
     overlay_button.text = "START LEVEL"
     overlay_panel.visible = true
 
@@ -802,6 +999,7 @@ func _on_overlay_button_pressed() -> void:
             overlay_panel.visible = false
             level_active = true
             player.set_controls_enabled(true)
+            touch_controls.set_controls_enabled(true)
             _show_message("GO!", 1.0)
         "next":
             overlay_panel.visible = false
@@ -880,35 +1078,12 @@ func _build_interface() -> void:
     message_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     root.add_child(message_label)
 
-    _create_direction_button(root, "◀", Vector2(26, -120), "left")
-    _create_direction_button(root, "▶", Vector2(178, -120), "right")
-    _create_direction_button(root, "▲", Vector2(102, -196), "forward")
-    _create_direction_button(root, "▼", Vector2(102, -44), "back")
-
-    var jump := _create_button(root, "JUMP", Vector2(-164, -145), Vector2(136, 102), true, Color(0.2, 0.55, 0.72, 0.78))
-    jump.button_down.connect(func() -> void: player.request_jump())
-    var camera_left := _create_button(root, "CAM ◀", Vector2(-326, -220), Vector2(116, 58), true, Color(0.28, 0.18, 0.55, 0.74))
-    var camera_right := _create_button(root, "CAM ▶", Vector2(-198, -220), Vector2(116, 58), true, Color(0.28, 0.18, 0.55, 0.74))
-    camera_left.button_down.connect(func() -> void: orbit_camera.set_button_axis(-1.0))
-    camera_left.button_up.connect(func() -> void: orbit_camera.set_button_axis(0.0))
-    camera_right.button_down.connect(func() -> void: orbit_camera.set_button_axis(1.0))
-    camera_right.button_up.connect(func() -> void: orbit_camera.set_button_axis(0.0))
-
-    var camera_hint := Label.new()
-    camera_hint.text = "SWIPE RIGHT SIDE TO ORBIT CAMERA  •  Q / E  •  RIGHT-MOUSE DRAG"
-    camera_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    camera_hint.anchor_left = 0.5
-    camera_hint.anchor_right = 0.5
-    camera_hint.anchor_top = 1.0
-    camera_hint.anchor_bottom = 1.0
-    camera_hint.offset_left = -360.0
-    camera_hint.offset_right = 360.0
-    camera_hint.offset_top = -30.0
-    camera_hint.offset_bottom = -7.0
-    camera_hint.add_theme_font_size_override("font_size", 13)
-    camera_hint.add_theme_color_override("font_color", Color(0.72, 0.82, 1.0, 0.72))
-    camera_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    root.add_child(camera_hint)
+    touch_controls = TOUCH_CONTROLS.new()
+    root.add_child(touch_controls)
+    touch_controls.movement_changed.connect(player.set_touch_input)
+    touch_controls.jump_requested.connect(player.request_jump)
+    touch_controls.camera_dragged.connect(orbit_camera.orbit)
+    touch_controls.set_controls_enabled(false)
 
     overlay_panel = PanelContainer.new()
     overlay_panel.anchor_left = 0.5
@@ -955,31 +1130,6 @@ func _build_interface() -> void:
     overlay_box.add_child(overlay_button)
 
 
-func _create_direction_button(parent: Control, text: String, offset: Vector2, action: String) -> void:
-    var button := _create_button(parent, text, offset, Vector2(70, 70), false, Color(0.12, 0.25, 0.58, 0.75))
-    button.button_down.connect(_on_touch_action.bind(action, true))
-    button.button_up.connect(_on_touch_action.bind(action, false))
-
-
-func _create_button(parent: Control, text: String, offset: Vector2, size: Vector2, from_right: bool, color: Color) -> Button:
-    var button := Button.new()
-    button.text = text
-    button.focus_mode = Control.FOCUS_NONE
-    button.anchor_top = 1.0
-    button.anchor_bottom = 1.0
-    if from_right:
-        button.anchor_left = 1.0
-        button.anchor_right = 1.0
-    button.offset_left = offset.x
-    button.offset_top = offset.y
-    button.offset_right = offset.x + size.x
-    button.offset_bottom = offset.y + size.y
-    button.add_theme_font_size_override("font_size", 20)
-    _style_button(button, color)
-    parent.add_child(button)
-    return button
-
-
 func _style_button(button: Button, color: Color) -> void:
     var normal := StyleBoxFlat.new()
     normal.bg_color = color
@@ -996,21 +1146,6 @@ func _style_button(button: Button, color: Color) -> void:
     button.add_theme_stylebox_override("pressed", pressed)
     button.add_theme_color_override("font_color", Color.WHITE)
     button.add_theme_color_override("font_pressed_color", Color("07112b"))
-
-
-func _on_touch_action(action: String, pressed: bool) -> void:
-    touch_state[action] = pressed
-    _sync_touch_input()
-
-
-func _sync_touch_input() -> void:
-    if not is_instance_valid(player):
-        return
-    var vector := Vector2(
-        float(touch_state["right"]) - float(touch_state["left"]),
-        float(touch_state["back"]) - float(touch_state["forward"])
-    )
-    player.set_touch_input(vector.normalized() if vector.length_squared() > 1.0 else vector)
 
 
 func _update_hud() -> void:
@@ -1050,14 +1185,23 @@ func _add_box_collision(parent: CollisionObject3D, size: Vector3) -> CollisionSh
 
 
 func _add_box_visual(parent: Node3D, size: Vector3, position: Vector3, color: Color, emission: float = 0.0, transparent: bool = false) -> MeshInstance3D:
-    var box := BoxMesh.new()
-    box.size = size
     var visual := MeshInstance3D.new()
-    visual.mesh = box
+    visual.mesh = unit_box_mesh
+    visual.scale = size
     visual.position = position
-    visual.material_override = _make_material(color, emission, transparent, false)
+    visual.material_override = _get_cached_material(color, emission, transparent)
+    visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     parent.add_child(visual)
     return visual
+
+
+func _get_cached_material(color: Color, emission: float, transparent: bool) -> StandardMaterial3D:
+    var key := "%s|%.2f|%s" % [color.to_html(true), emission, str(transparent)]
+    if material_cache.has(key):
+        return material_cache[key]
+    var material := _make_material(color, emission, transparent, false)
+    material_cache[key] = material
+    return material
 
 
 func _make_material(color: Color, emission: float = 0.0, transparent: bool = false, unshaded: bool = false) -> StandardMaterial3D:
