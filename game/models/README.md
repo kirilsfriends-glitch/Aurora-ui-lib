@@ -9,4 +9,4 @@ Expected exports:
 - `cargo_container.glb`;
 - `cover_crate.glb`.
 
-The Godot code includes lightweight fallback meshes so source-only validation remains possible before CI commits the generated models. Production Android builds require the generated asset set.
+The Godot code includes lightweight fallback meshes so source-only validation remains possible before CI commits the generated models. Production Android builds require the generated asset set. The initial 15-asset launch gallery was generated and validated successfully with Blender 4.3.2 before the Android production export.
