@@ -142,8 +142,9 @@ func _build_environment() -> void:
     environment.ambient_light_energy = 1.24
     environment.ambient_light_sky_contribution = 0.72
     environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
-    # AgX retains color in bright emissive parts instead of clipping them white.
-    environment.tonemap_mode = Environment.TONE_MAPPER_AGX
+    # Balanced source emissions retain color without relying on a costly or
+    # renderer-specific tone mapper.
+    environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
     environment.adjustment_enabled = true
     environment.adjustment_brightness = 1.16
     environment.adjustment_contrast = 1.03
