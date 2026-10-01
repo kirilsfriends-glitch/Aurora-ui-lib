@@ -13,4 +13,4 @@ The focused quality slice contains only six runtime GLBs:
 
 The Dockyard export is a complete authored environment with wet deck, warehouses, container lanes, a Customs landmark, cranes, spawn shelters, lighting fixtures, cover details, tanks, pipes, and safety furniture. Collision and tactical navigation are authored in `dockyard_map.gd` so mobile physics remains predictable.
 
-Broad prototype assets are deliberately removed rather than presented as finished content.
+Broad prototype assets are deliberately removed rather than presented as finished content. The authored Dockyard GLB is approximately 2.3 MB and has been generated successfully from the reproducible source.
