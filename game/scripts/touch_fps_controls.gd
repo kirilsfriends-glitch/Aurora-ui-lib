@@ -59,10 +59,13 @@ func _touch(event: InputEventScreenTouch) -> void:
             "fire":
                 fire_touches += 1
                 fire_changed.emit(true)
+                Input.vibrate_handheld(12, 0.25)
             "ads":
                 ads_touches += 1
                 ads_changed.emit(true)
-            "jump": jump_requested.emit()
+            "jump":
+                jump_requested.emit()
+                Input.vibrate_handheld(9, 0.18)
             "reload": reload_requested.emit()
             "swap": swap_requested.emit()
             "crouch": crouch_changed.emit(true)

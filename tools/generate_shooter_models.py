@@ -15,6 +15,10 @@ MODEL_DIR = ROOT / "game" / "models"
 BLEND_PATH = ROOT / "assets" / "blender" / "aurora_strike_assets.blend"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 BLEND_PATH.parent.mkdir(parents=True, exist_ok=True)
+# The quality vertical slice ships only its verified runtime assets. Remove stale
+# broad-prototype exports before rebuilding the focused gallery.
+for stale_glb in MODEL_DIR.glob("*.glb"):
+    stale_glb.unlink()
 
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
@@ -50,6 +54,12 @@ MAT = {
     "fabric": material("Fabric", (0.07, 0.09, 0.075), 0.0, 0.92),
     "cargo": material("Cargo Paint", (0.075, 0.25, 0.29), 0.4, 0.55),
     "crate": material("Composite Crate", (0.28, 0.19, 0.095), 0.08, 0.75),
+    "concrete": material("Wet Concrete", (0.075, 0.095, 0.105), 0.08, 0.22),
+    "rust": material("Weathered Rust", (0.24, 0.075, 0.028), 0.62, 0.48),
+    "paint_blue": material("Dock Blue Paint", (0.035, 0.16, 0.21), 0.38, 0.38),
+    "paint_orange": material("Safety Orange", (0.72, 0.21, 0.035), 0.24, 0.36),
+    "lamp_cyan": material("Cold Dock Lamp", (0.12, 0.72, 0.88), 0.15, 0.16, (0.12, 0.82, 1.0)),
+    "lamp_warm": material("Warm Work Lamp", (0.95, 0.42, 0.08), 0.12, 0.2, (1.0, 0.34, 0.045)),
 }
 
 
@@ -257,6 +267,122 @@ def build_crate(asset):
     return root
 
 
+def build_dockyard_environment(asset):
+    """Author the vertical slice arena as a detailed Blender environment.
+
+    Positions are specified in Godot coordinates and converted from Y-up to Blender
+    Z-up here. Gameplay collision is authored separately in dockyard_map.gd.
+    """
+    root = root_for(asset)
+
+    def box_g(name, pos, size, mat, bevel=0.04):
+        x, y, z = pos
+        sx, sy, sz = size
+        return cube(name, (x, -z, y), (sx, sz, sy), mat, root, bevel)
+
+    def cyl_g(name, pos, radius, height, mat, vertices=16):
+        x, y, z = pos
+        return cylinder(name, (x, -z, y), radius, height, mat, root, vertices=vertices, axis="Z")
+
+    # Wet playable deck and contrasting lane markings.
+    box_g("Wet dock deck", (0, -0.36, 0), (72, 0.7, 46), MAT["concrete"], 0.03)
+    for z in (-15.2, 0, 15.2):
+        for x in range(-30, 31, 6):
+            box_g("Lane marking", (x, 0.012, z), (3.4, 0.022, 0.10), MAT["lamp_cyan"], 0.005)
+    for x in (-34.8, 34.8):
+        box_g("Perimeter curb", (x, 0.16, 0), (0.5, 0.34, 46), MAT["steel"], 0.04)
+
+    # Warehouse silhouettes close the long sides without creating a flat box arena.
+    for z, facing_mat in [(-21.6, MAT["paint_blue"]), (21.6, MAT["rust"])]:
+        box_g("Warehouse wall", (0, 3.6, z), (72, 7.2, 2.2), facing_mat, 0.12)
+        for x in (-27, -15, -3, 9, 21):
+            box_g("Warehouse bay", (x, 2.4, z + (1.12 if z < 0 else -1.12)), (7.2, 4.8, 0.16), MAT["black"], 0.03)
+            box_g("Bay header", (x, 5.05, z + (1.25 if z < 0 else -1.25)), (8.0, 0.22, 0.22), MAT["lamp_warm"], 0.02)
+        for x in (-32, -20, -8, 4, 16, 28):
+            box_g("Warehouse rib", (x, 4.0, z + (1.2 if z < 0 else -1.2)), (0.22, 7.2, 0.28), MAT["steel"], 0.025)
+
+    # Main three-lane container arrangement, deliberately asymmetric in detail but
+    # symmetric in cover timing. These match the collision boxes in DockyardMap.
+    containers = [
+        (-25, 0, -14, 8, 2.65, 2.8, "blue"), (-14, 0, -14, 10, 2.65, 2.8, "rust"),
+        (2, 0, -14, 8, 2.65, 2.8, "blue"), (17, 0, -14, 12, 2.65, 2.8, "rust"),
+        (28, 0, -8, 2.8, 2.65, 8, "blue"),
+        (25, 0, 14, 8, 2.65, 2.8, "rust"), (14, 0, 14, 10, 2.65, 2.8, "blue"),
+        (-2, 0, 14, 8, 2.65, 2.8, "rust"), (-17, 0, 14, 12, 2.65, 2.8, "blue"),
+        (-28, 0, 8, 2.8, 2.65, 8, "rust"),
+    ]
+    for idx, (x, _y, z, sx, sy, sz, tint) in enumerate(containers):
+        mat = MAT["paint_blue"] if tint == "blue" else MAT["rust"]
+        box_g(f"Container {idx:02d}", (x, sy * 0.5, z), (sx, sy, sz), mat, 0.055)
+        # Corrugated ribs, end frames and small emissive identification stripe.
+        count = max(2, int(sx / 1.05)) if sx > sz else max(2, int(sz / 1.05))
+        for rib in range(count + 1):
+            if sx > sz:
+                rx = x - sx * 0.46 + rib * (sx * 0.92 / count)
+                box_g("Container rib", (rx, sy * 0.5, z - sz * 0.505), (0.075, sy * 0.88, 0.06), MAT["steel"], 0.01)
+            else:
+                rz = z - sz * 0.46 + rib * (sz * 0.92 / count)
+                box_g("Container rib", (x - sx * 0.505, sy * 0.5, rz), (0.06, sy * 0.88, 0.075), MAT["steel"], 0.01)
+        box_g("Container code strip", (x, sy * 0.74, z - sz * 0.515), (min(sx * 0.55, 4.0), 0.07, 0.025), MAT["lamp_cyan"], 0.005)
+
+    # Raised double stacks make memorable silhouettes while remaining outside the
+    # player's walkable routes.
+    for x, z, tint in [(-19, -14, "blue"), (19, 14, "rust")]:
+        mat = MAT["paint_blue"] if tint == "blue" else MAT["rust"]
+        box_g("Upper container", (x, 3.98, z), (8.0, 2.65, 2.8), mat, 0.055)
+        for rx in (-3.5, 3.5):
+            box_g("Upper lock", (x + rx, 2.7, z - 1.43), (0.18, 0.16, 0.14), MAT["lamp_warm"], 0.02)
+
+    # Central customs block creates two short flanks around a readable landmark.
+    box_g("Customs block", (0, 2.05, 0), (13.5, 4.1, 8.0), MAT["paint_blue"], 0.1)
+    for z in (-4.06, 4.06):
+        box_g("Customs shutter", (0, 1.65, z), (7.2, 2.8, 0.15), MAT["black"], 0.025)
+        for x in (-3, -1.5, 0, 1.5, 3):
+            box_g("Shutter rib", (x, 1.65, z + (-0.09 if z < 0 else 0.09)), (0.07, 2.45, 0.06), MAT["steel"], 0.008)
+    box_g("Customs light band", (0, 3.55, -4.14), (10.5, 0.12, 0.08), MAT["lamp_cyan"], 0.01)
+    box_g("Customs roof cap", (0, 4.2, 0), (14.2, 0.22, 8.7), MAT["steel"], 0.04)
+
+    # Low cover has bevels, contrasting caps, and readable waist-height profiles.
+    cover_positions = [
+        (-25, -3), (-17, 4), (-10, -6), (-9, 8), (9, -8), (10, 6), (17, -4), (25, 3),
+        (-4.8, -8), (4.8, 8), (-4.8, 8), (4.8, -8),
+    ]
+    for idx, (x, z) in enumerate(cover_positions):
+        size = (2.3, 1.25, 1.15) if idx % 3 else (3.2, 1.15, 0.85)
+        box_g("Ballistic cover", (x, size[1] * 0.5, z), size, MAT["crate"], 0.09)
+        box_g("Cover cap", (x, size[1] + 0.035, z), (size[0] * 0.92, 0.07, size[2] * 0.9), MAT["paint_orange"], 0.018)
+        box_g("Cover inset", (x, size[1] * 0.58, z - size[2] * 0.515), (size[0] * 0.52, 0.36, 0.03), MAT["black"], 0.01)
+
+    # Two crane portals and catwalk detail frame the skyline.
+    for x in (-12, 15):
+        for z in (-18.2, 18.2):
+            box_g("Crane upright", (x, 5.3, z), (0.72, 10.6, 0.72), MAT["rust"], 0.06)
+        box_g("Crane beam", (x, 10.3, 0), (0.9, 0.72, 37.0), MAT["rust"], 0.06)
+        for z in range(-15, 16, 5):
+            box_g("Crane brace", (x, 9.65, z), (1.8, 0.16, 0.16), MAT["paint_orange"], 0.025)
+        box_g("Crane lamp rail", (x - 0.5, 9.2, 0), (0.12, 0.12, 31), MAT["lamp_warm"], 0.012)
+
+    # Spawn shelters and colored team identity lighting.
+    for x, team_mat in [(-31.5, MAT["lamp_cyan"]), (31.5, MAT["lamp_warm"])]:
+        box_g("Spawn shelter back", (x, 1.65, 0), (1.0, 3.3, 14), MAT["steel"], 0.07)
+        box_g("Spawn shelter roof", (x - (2.1 if x < 0 else -2.1), 3.25, 0), (5.2, 0.25, 14), MAT["black"], 0.05)
+        for z in (-6, 0, 6):
+            box_g("Spawn lamp", (x - (2.2 if x < 0 else -2.2), 2.75, z), (0.9, 0.1, 0.16), team_mat, 0.02)
+
+    # Pipes, tanks, bollards and lamps provide dense close-up detail at low cost.
+    for x, z in [(-31, -17), (-31, 17), (31, -17), (31, 17)]:
+        cyl_g("Fuel tank", (x, 1.2, z), 1.2, 2.4, MAT["steel"], 20)
+        box_g("Tank hazard stripe", (x, 1.2, z - 1.21), (1.45, 0.24, 0.04), MAT["paint_orange"], 0.01)
+    for x in range(-30, 31, 10):
+        for z in (-18.5, 18.5):
+            cyl_g("Safety bollard", (x, 0.55, z), 0.095, 1.1, MAT["paint_orange"], 12)
+    for x, z, warm in [(-24, -9, False), (-8, 10, True), (8, -10, False), (24, 9, True)]:
+        cyl_g("Lamp post", (x, 3.0, z), 0.075, 6.0, MAT["steel"], 12)
+        box_g("Lamp head", (x, 5.9, z), (0.65, 0.18, 0.26), MAT["lamp_warm"] if warm else MAT["lamp_cyan"], 0.035)
+
+    return root
+
+
 def export_asset(name, root, showcase_position):
     bpy.ops.object.select_all(action="DESELECT")
     root.select_set(True)
@@ -278,18 +404,9 @@ builders = [
     ("ak47", lambda: build_rifle("AK-47", "ak")),
     ("m4a1", lambda: build_rifle("M4A1", "modern")),
     ("awp", lambda: build_rifle("AWP", "modern", sniper=True)),
-    ("scout", lambda: build_rifle("Scout", "scout", sniper=True)),
-    ("mp5", lambda: build_rifle("MP5", "modern", smg=True)),
-    ("p90", lambda: build_rifle("P90", "p90", smg=True)),
-    ("nova_shotgun", lambda: build_shotgun("Nova")),
-    ("deagle", lambda: build_pistol("Desert Eagle", heavy=True)),
     ("glock", lambda: build_pistol("Glock-18")),
-    ("usp", lambda: build_pistol("USP-S", suppressed=True)),
-    ("knife", lambda: build_knife("Tactical Knife")),
-    ("grenade", lambda: build_grenade("Frag Grenade")),
     ("tactical_operator", lambda: build_operator("Tactical Operator")),
-    ("cargo_container", lambda: build_container("Cargo Container")),
-    ("cover_crate", lambda: build_crate("Cover Crate")),
+    ("dockyard_environment", lambda: build_dockyard_environment("Dockyard Reforged Environment")),
 ]
 
 for index, (name, builder) in enumerate(builders):

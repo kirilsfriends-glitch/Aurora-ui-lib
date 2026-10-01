@@ -1,4 +1,4 @@
-name: Build Aurora Strike Mobile APK
+name: Validate Aurora Strike Vertical Slice
 
 on:
   workflow_dispatch:
@@ -10,19 +10,18 @@ on:
       - ".github/workflows/build-android.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: aurora-strike-mobile-android
+  group: aurora-strike-vertical-slice-android
   cancel-in-progress: true
 
 env:
-  APK_NAME: AuroraStrikeMobile-v0.1.0-debug.apk
-  RELEASE_TAG: aurora-strike-mobile-v0.1.0
+  APK_NAME: AuroraStrike-VerticalSlice-v0.2.0-alpha-debug.apk
 
 jobs:
   build-android:
-    name: Smoke-test and export arm64 APK
+    name: Runtime-test and export private test APK
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -30,17 +29,19 @@ jobs:
       - name: Check out project
         uses: actions/checkout@v5
 
-      - name: Check generated Blender models
+      - name: Check authored Blender environment
         id: assets
         run: |
-          if test -s game/models/ak47.glb && test -s game/models/tactical_operator.glb && test -s game/models/cargo_container.glb; then
+          if test -s game/models/dockyard_environment.glb \
+            && test -s game/models/ak47.glb \
+            && test -s game/models/tactical_operator.glb; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Blender models are not committed yet; asset generation will trigger the production build."
+            echo "The authored Dockyard environment is still being generated. No APK will be exported from stale assets."
           fi
 
-      - name: Import, test, and export with Godot 4.3
+      - name: Import, runtime-test, and export with Godot 4.3
         if: steps.assets.outputs.ready == 'true'
         run: |
           mkdir -p build/android
@@ -52,13 +53,13 @@ jobs:
             bash -lc '
               set -euo pipefail
               echo "Godot: $(godot --version)"
-              echo "STAGE 1/3: import project and Blender GLBs"
+              echo "STAGE 1/3: import authored Blender map, operators, weapons, UI, and audio"
               timeout --signal=TERM --kill-after=30s 420s \
                 godot --headless --editor --quit
-              echo "STAGE 2/3: gameplay smoke tests"
+              echo "STAGE 2/3: deploy and validate the full 5v5 vertical slice"
               timeout --signal=TERM --kill-after=30s 420s \
                 godot --headless --path . --script res://tests/shooter_smoke_test.gd
-              echo "STAGE 3/3: Android export"
+              echo "STAGE 3/3: export private Android test build"
               timeout --signal=TERM --kill-after=30s 900s \
                 godot --headless --verbose \
                   --export-debug "Android" \
@@ -70,14 +71,14 @@ jobs:
           STATUS=${PIPESTATUS[0]}
           set -e
           {
-            echo "### Aurora Strike Godot export log"
+            echo "### Aurora Strike vertical slice validation"
             echo '```text'
-            tail -n 200 build/android/export.log
+            tail -n 220 build/android/export.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$STATUS" -ne 0 ]; then
-            DETAILS=$(tail -n 80 build/android/export.log | sed 's/%/%25/g; s/\r/%0D/g' | paste -sd '|' - | sed 's/|/%0A/g')
-            echo "::error title=Godot Android export failed::$DETAILS"
+            DETAILS=$(tail -n 90 build/android/export.log | sed 's/%/%25/g; s/\r/%0D/g' | paste -sd '|' - | sed 's/|/%0A/g')
+            echo "::error title=Vertical slice validation failed::$DETAILS"
             exit "$STATUS"
           fi
 
@@ -93,46 +94,13 @@ jobs:
           ls -lh "$APK" "$APK.sha256"
           cat "$APK.sha256"
 
-      - name: Upload Android artifact
+      - name: Upload private test artifact
         if: steps.assets.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: aurora-strike-mobile-android
+          name: aurora-strike-vertical-slice-private-test
           path: |
             build/android/${{ env.APK_NAME }}
             build/android/${{ env.APK_NAME }}.sha256
           if-no-files-found: error
-
-      - name: Publish GitHub Release
-        if: steps.assets.outputs.ready == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          APK="build/android/$APK_NAME"
-          CHECKSUM="$APK.sha256"
-          NOTES=$(cat <<'EOF'
-          ## Aurora Strike: Mobile v0.1.0
-
-          A new offline first-person tactical shooter built from scratch for Android.
-
-          - **5 tactical maps:** Dockyard Zero, Sandstone Citadel, Metro Nexus, Frostline Base, and Neon Labs.
-          - **12 weapons:** AK-47, M4A1, AWP, Scout, MP5, P90, Nova, Desert Eagle, Glock-18, USP-S, tactical knife, and frag grenade.
-          - **3 modes:** Team Deathmatch, Elimination, and Control.
-          - **5v5 smart bots** use vision, hearing, investigation, AStar pathfinding, cover, retreats, reload decisions, and difficulty-scaled accuracy.
-          - **Map-voting lobby:** all nine bots cast randomized votes alongside the player.
-          - **True independent multitouch:** move, look, fire, ADS, jump, crouch, reload, and weapon swap can overlap.
-          - **Original Blender art:** procedural weapon, operator, container, and cover models are included with reproducible Blender source.
-
-          The APK is arm64-v8a, works offline, requests no custom permissions, and is debug-signed for direct sideloading. Verify the download with the attached SHA-256 file.
-          EOF
-          )
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$APK" "$CHECKSUM" --clobber
-            gh release edit "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Aurora Strike: Mobile v0.1.0 (Android)" --notes "$NOTES"
-          else
-            gh release create "$RELEASE_TAG" "$APK" "$CHECKSUM" \
-              --target "$GITHUB_SHA" \
-              --title "Aurora Strike: Mobile v0.1.0 (Android)" \
-              --notes "$NOTES"
-          fi
+          retention-days: 14

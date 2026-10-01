@@ -54,7 +54,7 @@ jobs:
       - name: Validate generated asset set
         run: |
           set -euo pipefail
-          assets=(ak47 m4a1 awp scout mp5 p90 nova_shotgun deagle glock usp knife grenade tactical_operator cargo_container cover_crate)
+          assets=(ak47 m4a1 awp glock tactical_operator dockyard_environment)
           for asset in "${assets[@]}"; do
             test -s "game/models/$asset.glb"
           done
@@ -76,7 +76,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add game/models/*.glb assets/blender/aurora_strike_assets.blend
+          git add -A game/models assets/blender/aurora_strike_assets.blend
           if git diff --cached --quiet; then
             echo "Generated assets are already current."
           else

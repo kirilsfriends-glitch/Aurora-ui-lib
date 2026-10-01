@@ -1,8 +1,7 @@
 extends SceneTree
 
 const WEAPON_DB := preload("res://scripts/weapon_database.gd")
-const MAP_LIBRARY := preload("res://scripts/map_library.gd")
-const MAP_BUILDER := preload("res://scripts/map_builder.gd")
+const DOCKYARD_MAP := preload("res://scripts/dockyard_map.gd")
 
 var failures: Array[String] = []
 
@@ -15,39 +14,35 @@ func check(value: bool, message: String) -> void:
         push_error(message)
 
 func _run() -> void:
-    check(WEAPON_DB.ORDER.size() == 12, "Expected exactly 12 launch weapons")
-    for weapon_id in WEAPON_DB.ORDER:
+    check(WEAPON_DB.ACTIVE_ORDER.size() == 4, "Vertical slice must expose four tuned weapons")
+    for weapon_id in WEAPON_DB.ACTIVE_ORDER:
         var weapon := WEAPON_DB.get_weapon(weapon_id)
-        check(not weapon.is_empty(), "Missing weapon: " + weapon_id)
+        check(not weapon.is_empty(), "Missing active weapon: " + weapon_id)
         check(float(weapon.get("damage", 0)) > 0, "Weapon has no damage: " + weapon_id)
         check(float(weapon.get("range", 0)) > 0, "Weapon has no range: " + weapon_id)
-        check(str(weapon.get("model", "")) != "", "Weapon has no model id: " + weapon_id)
+        check(ResourceLoader.exists("res://models/%s.glb" % weapon["model"]), "Weapon GLB missing: " + weapon_id)
+        check(ResourceLoader.exists("res://audio/%s_fire.wav" % weapon_id), "Weapon audio missing: " + weapon_id)
 
-    check(MAP_LIBRARY.MAP_ORDER.size() == 5, "Expected five tactical maps")
-    for map_id in MAP_LIBRARY.MAP_ORDER:
-        var data := MAP_LIBRARY.get_map(map_id)
-        check(str(data.get("id", "")) == map_id, "Map id mismatch: " + map_id)
-        check((data.get("obstacles", []) as Array).size() >= 10, "Map needs tactical cover: " + map_id)
-        check((data.get("spawns_a", []) as Array).size() >= 5, "Alpha spawns missing: " + map_id)
-        check((data.get("spawns_b", []) as Array).size() >= 5, "Bravo spawns missing: " + map_id)
-        var builder := MAP_BUILDER.new()
-        root.add_child(builder)
-        builder.build(data)
-        check(builder.get_team_spawn(0, 0) != builder.get_team_spawn(1, 0), "Team spawns overlap: " + map_id)
-        check(not builder.get_cover_points().is_empty(), "Cover graph missing: " + map_id)
-        check(not builder.find_path(builder.get_team_spawn(0, 0), builder.get_team_spawn(1, 0)).is_empty(), "Path graph missing: " + map_id)
-        builder.free()
+    var map := DOCKYARD_MAP.new()
+    root.add_child(map)
+    map.build()
+    check(map.get_team_spawn(0, 0) != map.get_team_spawn(1, 0), "Team spawns overlap")
+    check(map.get_cover_points().size() >= 60, "Authored map needs a dense cover graph")
+    var route := map.find_path(map.get_team_spawn(0, 0), map.get_team_spawn(1, 0))
+    check(not route.is_empty(), "AStar could not route between team spawns")
+    check(map.get_location_name(Vector3.ZERO) == "CUSTOMS", "Map location zones are unavailable")
+    map.free()
 
-    var required_scripts := [
-        "res://scripts/game.gd", "res://scripts/player_controller.gd", "res://scripts/bot_controller.gd",
-        "res://scripts/weapon_controller.gd", "res://scripts/touch_fps_controls.gd", "res://scripts/lobby.gd", "res://scripts/hud.gd"
+    var required_assets := [
+        "res://ui/dockyard_briefing.webp", "res://models/dockyard_environment.glb",
+        "res://models/tactical_operator.glb", "res://audio/dockyard_rain.wav",
+        "res://audio/hit_confirm.wav", "res://audio/rifle_reload.wav",
     ]
-    for path in required_scripts:
-        check(ResourceLoader.exists(path), "Missing gameplay system: " + path)
+    for path in required_assets:
+        check(ResourceLoader.exists(path), "Missing vertical slice asset: " + path)
 
-    # Instantiate the real entry scene and deploy a complete 5v5 match. This exercises
-    # lobby/HUD construction, generated operator and weapon scenes, signal wiring,
-    # map creation, the local first-person controller, and all nine bot controllers.
+    # Deploy the real entry scene. This runs authored map construction, lobby/HUD,
+    # generated models, procedural audio, signal wiring, controllers, and all 10 AI actors.
     var main_scene := load("res://main.tscn") as PackedScene
     check(main_scene != null, "Main scene could not be loaded")
     if main_scene != null:
@@ -55,17 +50,17 @@ func _run() -> void:
         root.add_child(game)
         await process_frame
         check(game.lobby != null and game.hud != null, "Lobby or HUD failed to initialize")
-        await game.start_match("dockyard", "tdm", 0.7)
-        check(game.actors.size() == 10, "Expected a complete 5v5 match")
-        check(game.local_player != null and game.local_player.alive, "First-person player failed to spawn")
-        check(game.map_runtime != null, "Runtime tactical map failed to build")
-        check(game.get_living_allies(0).size() == 5, "Alpha team did not spawn five combatants")
-        check(game.get_living_allies(1).size() == 5, "Bravo team did not spawn five combatants")
+        await game.start_match("ak47", 0.70)
+        check(game.actors.size() == 10, "Expected a complete 5v5 deployment")
+        check(game.local_player != null and game.local_player.alive, "FPS player failed to spawn")
+        check(game.get_living_allies(0).size() == 5, "Alpha squad did not spawn five operators")
+        check(game.get_living_allies(1).size() == 5, "Bravo squad did not spawn five operators")
+        check(game.map_runtime.get_cover_points().size() >= 60, "Runtime cover data was lost")
         game.free()
 
     if failures.is_empty():
-        print("AURORA STRIKE SMOKE TEST PASSED: 5 maps, 12 weapons, AI, lobby, HUD and controls loaded")
+        print("AURORA STRIKE VERTICAL SLICE PASSED: authored map, audio, UI, four weapons, and 5v5 deployment")
         quit(0)
     else:
-        print("AURORA STRIKE SMOKE TEST FAILED: %d issue(s)" % failures.size())
+        print("AURORA STRIKE VERTICAL SLICE FAILED: %d issue(s)" % failures.size())
         quit(1)

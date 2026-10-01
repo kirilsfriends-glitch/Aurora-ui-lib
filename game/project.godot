@@ -4,7 +4,7 @@ config_version=5
 
 [application]
 config/name="Aurora Strike: Mobile"
-config/description="A 5v5 tactical mobile FPS with smart bots, map voting, and twelve weapons."
+config/description="A focused 5v5 mobile FPS vertical slice with an authored Dockyard map and tactical bots."
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 boot_splash/bg_color=Color(0.018, 0.028, 0.055, 1)

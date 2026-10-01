@@ -1,64 +1,78 @@
-# Aurora Strike: Mobile — Godot Project
+# Aurora Strike vertical slice — Godot project
 
-Aurora Strike is a mobile-focused 5v5 offline FPS built with Godot 4.3 GL Compatibility rendering.
+This is the focused 0.2 quality rebuild of Aurora Strike for Godot 4.3 GL Compatibility rendering.
 
-## Game flow
+## Current playable content
 
-The opening operations lobby allows the player to choose a mode and bot difficulty, then vote on one of five maps. Nine simulated bot votes are randomized for each lobby. The highest-voted map wins; tied votes are resolved randomly.
+### Dockyard / Night
 
-- **Team Deathmatch:** first team to 40 eliminations, with three-second respawns.
-- **Elimination:** no mid-round respawns; first team to win five rounds wins the match.
-- **Control:** occupy the center zone uncontested; first team to 100 points wins.
+A manually arranged three-lane 5v5 map:
 
-Each match contains the local player, four Alpha teammates, and five Bravo opponents.
+- north and south container routes for rifles and flanks;
+- a central Customs block with two short rotations;
+- protected team staging yards;
+- symmetric travel timing with asymmetric environmental detail;
+- waist-height ballistic cover and hard container cover;
+- authored location callouts used by the HUD;
+- a dense AStar waypoint graph and more than 60 cover candidates;
+- wet industrial materials, rain, crane silhouettes, cold/warm work lights, and ambient dock audio.
+
+### Team Deathmatch
+
+Alpha and Bravo deploy five operators each. The first squad to 30 eliminations wins. Eliminated combatants redeploy after 3.2 seconds.
+
+### Active loadouts
+
+- AK-47 — heavy damage and stronger recoil;
+- M4A1 — lower recoil and faster follow-up shots;
+- AWP — slow high-caliber precision rifle with scoped ADS;
+- Glock-18 — fast, mobile close-range sidearm.
+
+Only these four weapons are exposed by the rebuilt lobby. Older database entries are retained for later development, not represented as finished content.
 
 ## Controls
 
-### Android multitouch
+### Android
 
-Every touch is independently assigned and retained until release, so actions can overlap:
+Each finger keeps an independent role until release:
 
 - floating left stick — movement;
-- drag on unoccupied right-side space — camera aim;
-- **FIRE** — shoot (hold for automatic weapons);
-- **ADS** — aim down sights / scope;
+- drag in free right-side space — camera;
+- **FIRE** — shoot;
+- **ADS** — aim or scope;
 - **JUMP** — jump;
 - **DUCK** — crouch while held;
 - **R** — reload;
-- **SWAP** — cycle through all twelve weapons.
+- **SWAP** — cycle the four test loadouts.
 
-### Desktop test controls
+### Desktop validation
 
-- `W`, `A`, `S`, `D` — move;
-- mouse — aim;
+- `WASD` — movement;
+- mouse — camera;
 - left mouse — fire;
+- right mouse — ADS;
 - `Space` — jump;
+- `C` — crouch;
 - `R` — reload;
-- `Q` — cycle weapon;
-- `Esc` — release the mouse cursor.
+- `Q` — cycle active weapons;
+- `Esc` — release mouse capture.
 
-## Systems
+## Main systems
 
-- `scripts/game.gd` — match lifecycle, teams, modes, scoring, rounds, respawns, effects, and damage policy.
-- `scripts/lobby.gd` — operations UI and player/bot map voting.
-- `scripts/player_controller.gd` — first-person movement, camera, crouch, ADS, health, and loadout.
-- `scripts/bot_controller.gd` — perception, hearing, tactical states, AStar routing, cover, combat, and skill scaling.
-- `scripts/weapon_controller.gd` — hitscan, shotgun pellets, headshots, reloads, recoil, grenades, and model mounting.
-- `scripts/weapon_database.gd` — authoritative statistics for the twelve launch weapons.
-- `scripts/map_library.gd` — five map layouts, palettes, spawns, obstacles, and objectives.
-- `scripts/map_builder.gd` — optimized procedural geometry and waypoint/cover graph generation.
-- `scripts/touch_fps_controls.gd` — independent mobile touch-role tracking.
-- `scripts/hud.gd` — match score, timer, kill feed, hit feedback, health, ammunition, and objectives.
-
-The map renderer uses shared primitive resources, low-cost materials, baked procedural layouts, shadow-free directional lighting, and 0.85 3D scaling for stable mobile performance. Detailed Blender assets are reserved for weapons, operators, and high-value props.
+- `scripts/dockyard_map.gd` — authored collisions, lighting, rain, ambience, callouts, AStar and cover graph.
+- `scripts/game.gd` — focused TDM lifecycle, teams, scoring, redeployment, effects and damage policy.
+- `scripts/lobby.gd` — cinematic briefing and four-weapon loadout selection.
+- `scripts/hud.gd` — score bar, location, objective, health/ammo panels, kill feed and combat feedback.
+- `scripts/player_controller.gd` — FPS movement, crouch, ADS, camera bob/sway, recoil and health.
+- `scripts/bot_controller.gd` — perception, hearing, investigation, routing, cover and combat states.
+- `scripts/weapon_controller.gd` — hitscan, accuracy, headshots, audio, reload, recoil animation and effects.
+- `scripts/touch_fps_controls.gd` — independent multitouch role tracking.
 
 ## Validation
-
-With Godot 4.3 available:
 
 ```bash
 godot --headless --editor --quit --path game
 godot --headless --path game --script res://tests/shooter_smoke_test.gd
 ```
 
-The CI smoke test verifies 12 weapon definitions, five maps, ten spawn sets, tactical cover, and AStar routes before Android export.
+The smoke test loads the real entry scene and deploys all ten combatants. Android CI publishes only a temporary workflow artifact while this rebuild is under review.

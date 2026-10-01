@@ -20,6 +20,8 @@ var fire_just_pressed := false
 var ads_held := false
 var jump_buffer := 0.0
 var crouching := false
+var touch_crouch := false
+var look_sway := Vector2.ZERO
 var yaw := 0.0
 var pitch := 0.0
 var mouse_sensitivity := 0.0022
@@ -40,7 +42,7 @@ func setup(game_node: Node, spawn: Vector3, initial_weapon: String = "ak47") -> 
     game = game_node
     spawn_position = spawn
     global_position = spawn
-    weapon_index = maxi(0, WEAPON_DB.ORDER.find(initial_weapon))
+    weapon_index = maxi(0, WEAPON_DB.ACTIVE_ORDER.find(initial_weapon))
     weapon = WEAPON_CONTROLLER.new()
     weapon_mount.add_child(weapon)
     weapon.setup(self, game, initial_weapon, true)
@@ -98,16 +100,22 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
     invulnerable = maxf(0.0, invulnerable - delta)
     if not alive or game == null or not game.is_match_active(): return
+    var using_ads := ads_held or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
     var target_fov := 72.0
-    if ads_held:
+    if using_ads:
         target_fov = 28.0 if int(weapon.config["scope"]) > 0 else 52.0
     camera.fov = lerpf(camera.fov, target_fov, 10.0 * delta)
-    var target_mount := Vector3(0.02, -0.22, -0.56) if ads_held else Vector3(0.32, -0.27, -0.62)
+    var target_mount := Vector3(0.02, -0.22, -0.56) if using_ads else Vector3(0.32, -0.27, -0.62)
+    var sway_scale := 0.00035 if using_ads else 0.00075
+    target_mount += Vector3(-look_sway.x * sway_scale, look_sway.y * sway_scale, 0)
     weapon_mount.position = weapon_mount.position.lerp(target_mount, 10.0 * delta)
+    weapon_mount.rotation.z = lerpf(weapon_mount.rotation.z, -look_sway.x * 0.00018, 9.0 * delta)
+    look_sway = look_sway.lerp(Vector2.ZERO, 8.0 * delta)
 
 func _physics_process(delta: float) -> void:
     if not alive or game == null or not game.is_match_active(): return
     jump_buffer = maxf(0.0, jump_buffer - delta)
+    crouching = touch_crouch or Input.is_action_pressed("crouch")
     var input_vector := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
     if touch_move.length_squared() > 0.01: input_vector = touch_move
     var forward := -global_basis.z
@@ -116,7 +124,8 @@ func _physics_process(delta: float) -> void:
     direction.y = 0
     direction = direction.normalized()
     var speed := 6.6 * float(weapon.config["move"])
-    if ads_held: speed *= 0.72
+    var using_ads := ads_held or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+    if using_ads: speed *= 0.72
     if crouching: speed *= 0.58
     var acceleration := 24.0 if is_on_floor() else 8.0
     velocity.x = move_toward(velocity.x, direction.x * speed, acceleration * delta)
@@ -135,7 +144,7 @@ func _physics_process(delta: float) -> void:
     var wants_fire := fire_held or keyboard_fire
     var automatic := bool(weapon.config["auto"])
     if (automatic and wants_fire) or fire_just_pressed:
-        weapon.try_fire(camera.global_position, -camera.global_basis.z, ads_held)
+        weapon.try_fire(camera.global_position, -camera.global_basis.z, using_ads)
     fire_just_pressed = false
     if Input.is_action_just_pressed("reload"): weapon.start_reload()
     if Input.is_action_just_pressed("jump"): request_jump()
@@ -147,21 +156,22 @@ func apply_look(relative: Vector2, sensitivity: float = -1.0) -> void:
     pitch = clampf(pitch - relative.y * value, deg_to_rad(-82), deg_to_rad(82))
     rotation.y = yaw
     view_pivot.rotation.x = pitch
+    look_sway += relative.limit_length(80.0)
 
 func set_touch_move(value: Vector2) -> void: touch_move = value
 func set_fire(value: bool) -> void:
     if value and not fire_held: fire_just_pressed = true
     fire_held = value
 func set_ads(value: bool) -> void: ads_held = value
-func set_crouch(value: bool) -> void: crouching = value
+func set_crouch(value: bool) -> void: touch_crouch = value
 func request_jump() -> void: jump_buffer = 0.18
 func request_reload() -> void:
     if is_instance_valid(weapon): weapon.start_reload()
 
 func next_weapon() -> void:
     if not alive: return
-    weapon_index = (weapon_index + 1) % WEAPON_DB.ORDER.size()
-    weapon.equip(WEAPON_DB.ORDER[weapon_index], true)
+    weapon_index = (weapon_index + 1) % WEAPON_DB.ACTIVE_ORDER.size()
+    weapon.equip(WEAPON_DB.ACTIVE_ORDER[weapon_index], true)
 
 func take_damage(amount: float, attacker, headshot: bool = false) -> void:
     if not alive or invulnerable > 0 or attacker == self: return

@@ -1,5 +1,9 @@
 extends RefCounted
 
+# The vertical slice deliberately exposes four tuned weapons. The remaining
+# definitions stay in the database for the later content expansion, but are not
+# presented as finished launch content.
+const ACTIVE_ORDER := ["ak47", "m4a1", "awp", "glock"]
 const ORDER := [
     "ak47", "m4a1", "awp", "scout", "mp5", "p90",
     "nova", "deagle", "glock", "usp", "knife", "frag",
